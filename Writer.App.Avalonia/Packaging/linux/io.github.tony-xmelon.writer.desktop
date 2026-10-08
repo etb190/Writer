@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Writer
+GenericName=Word Processor
+Comment=Open, edit, and save documents
+Exec=writer %F
+TryExec=writer
+Icon=io.github.tony-xmelon.writer
+Terminal=false
+Categories=Office;WordProcessor;
+MimeType=application/vnd.openxmlformats-officedocument.wordprocessingml.document;application/msword;application/vnd.oasis.opendocument.text;application/vnd.oasis.opendocument.text-template;application/vnd.oasis.opendocument.text-flat-xml;
+StartupNotify=true
+StartupWMClass=Writer
+Keywords=word;document;docx;odt;ott;fodt;writer;text;

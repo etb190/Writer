@@ -1,52 +1,24 @@
 <Project>
-  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
-    <Compile Include="$(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/*.cs"
-             Exclude="$(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/LocalizationWrapperContractTestSupport.cs;
-                      $(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/RecordingUserMessageService.cs;
-                      $(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/ReusableWpfWindowSession.cs;
-                      $(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/XunitDisableTestParallelization.cs"
-             Link="%(Filename)%(Extension)" />
-    <Compile Include="$(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/ReusableWpfWindowSession.cs"
-             Link="%(Filename)%(Extension)"
-             Condition="'$(UseWPF)' == 'true'" />
-    <Compile Include="$(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/LocalizationWrapperContractTestSupport.cs"
-             Link="%(Filename)%(Extension)"
-             Condition="'$(MSBuildProjectName)' == 'FreeX.App.Localization.Tests' Or
-                        '$(MSBuildProjectName)' == 'FreeW.App.Localization.Tests' Or
-                        '$(MSBuildProjectName)' == 'FreeP.App.Localization.Tests'" />
-    <Compile Include="$(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/RecordingUserMessageService.cs"
-             Link="%(Filename)%(Extension)"
-             Condition="'$(MSBuildProjectName)' == 'FreeW.App.Host.Tests' Or
-                        '$(MSBuildProjectName)' == 'FreeP.App.Host.Tests' Or
-                        '$(MSBuildProjectName)' == 'FreeW.App.Avalonia.Tests' Or
-                        '$(MSBuildProjectName)' == 'FreeP.App.Avalonia.Tests'" />
-    <Compile Include="$(MSBuildThisFileDirectory)tests/SharedTestInfrastructure/XunitDisableTestParallelization.cs"
-             Link="%(Filename)%(Extension)"
-             Condition="'$(MSBuildProjectName)' == 'FreeP.App.Host.Tests' Or
-                        '$(MSBuildProjectName)' == 'FreeP.App.Rendering.Avalonia.Tests' Or
-                        '$(MSBuildProjectName)' == 'Free.Shared.Ribbon.Tests'" />
-  </ItemGroup>
-
-  <Target Name="FilterFreeSharedLocalizationSatelliteResources"
+  <Target Name="FilterWriterSharedLocalizationSatelliteResources"
           BeforeTargets="_CopyFilesMarkedCopyLocal;CopyFilesToOutputDirectory"
-          Condition="'$(FreeSharedLocalizationProduct)' != ''">
+          Condition="'$(WriterSharedLocalizationProduct)' != ''">
     <ItemGroup>
-      <_FreeSharedLocalizationSatellites Include="@(ReferenceCopyLocalPaths)"
-        Condition="'%(ReferenceCopyLocalPaths.Filename)' == 'Free.Shared.Localization.resources'" />
-      <_FreeSharedLocalizationSupported Include="@(_FreeSharedLocalizationSatellites)"
-        Condition="'$(FreeSharedLocalizationFilterAllSatellites)' != 'true' And
-          '$([System.Text.RegularExpressions.Regex]::IsMatch(&quot;%(_FreeSharedLocalizationSatellites.DestinationSubDirectory)&quot;, &quot;^($(FreeSharedLocalizationSupportedCulturePattern))[\\/]$&quot;))' == 'True'" />
-      <ReferenceCopyLocalPaths Remove="@(_FreeSharedLocalizationSatellites)" />
-      <ReferenceCopyLocalPaths Include="@(_FreeSharedLocalizationSupported)" />
+      <_WriterSharedLocalizationSatellites Include="@(ReferenceCopyLocalPaths)"
+        Condition="'%(ReferenceCopyLocalPaths.Filename)' == 'Writer.Shared.Localization.resources'" />
+      <_WriterSharedLocalizationSupported Include="@(_WriterSharedLocalizationSatellites)"
+        Condition="'$(WriterSharedLocalizationFilterAllSatellites)' != 'true' And
+          '$([System.Text.RegularExpressions.Regex]::IsMatch(&quot;%(_WriterSharedLocalizationSatellites.DestinationSubDirectory)&quot;, &quot;^($(WriterSharedLocalizationSupportedCulturePattern))[\\/]$&quot;))' == 'True'" />
+      <ReferenceCopyLocalPaths Remove="@(_WriterSharedLocalizationSatellites)" />
+      <ReferenceCopyLocalPaths Include="@(_WriterSharedLocalizationSupported)" />
     </ItemGroup>
   </Target>
 
-  <Target Name="RemoveFreeSharedLocalizationSatellitesForEnglishOnly"
+  <Target Name="RemoveWriterSharedLocalizationSatellitesForEnglishOnly"
           AfterTargets="_CopyFilesMarkedCopyLocal"
-          Condition="'$(FreeSharedLocalizationFilterAllSatellites)' == 'true'">
+          Condition="'$(WriterSharedLocalizationFilterAllSatellites)' == 'true'">
     <ItemGroup>
-      <_FreeSharedLocalizationEnglishOnlySatellite Include="$(TargetDir)**/Free.Shared.Localization.resources.dll" />
+      <_WriterSharedLocalizationEnglishOnlySatellite Include="$(TargetDir)**/Writer.Shared.Localization.resources.dll" />
     </ItemGroup>
-    <Delete Files="@(_FreeSharedLocalizationEnglishOnlySatellite)" />
+    <Delete Files="@(_WriterSharedLocalizationEnglishOnlySatellite)" />
   </Target>
 </Project>

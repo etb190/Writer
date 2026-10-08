@@ -1,0 +1,14 @@
+using Writer.Shared.Localization;
+
+namespace Writer.App.Localization;
+
+/// <summary>
+/// Portable, UI-framework-agnostic localization provider for Writer-owned shell,
+/// backstage, and common UI text.
+/// </summary>
+public abstract class Loc : LocalizedResourceCatalog<Loc>
+{
+    protected Loc()
+    {
+    }
+}

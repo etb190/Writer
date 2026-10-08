@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../shared/Writer.Shared.Ribbon/Writer.Shared.Ribbon.csproj" />
+    <ProjectReference Include="../Writer.App.Localization/Writer.App.Localization.csproj" />
+    <ProjectReference Include="../Writer.App.Presentation/Writer.App.Presentation.csproj" />
+    <ProjectReference Include="../Writer.Core.Model/Writer.Core.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Writer.Shared.Ribbon" />
+  </ItemGroup>
+
+</Project>

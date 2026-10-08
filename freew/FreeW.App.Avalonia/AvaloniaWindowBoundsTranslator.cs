@@ -1,1 +1,0 @@
-global using FreeWAvaloniaWindowBoundsTranslator = Free.Shared.Shell.Avalonia.AvaloniaWindowBoundsTranslator;

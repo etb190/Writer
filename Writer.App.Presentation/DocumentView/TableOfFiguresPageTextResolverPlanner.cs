@@ -1,0 +1,56 @@
+using Writer.App.Presentation.Dialogs;
+using Writer.Core.Model;
+
+namespace Writer.App.Presentation.DocumentView;
+
+/// <summary>
+/// Builds the page-label resolver used by generated Tables of Figures and Tables of Tables.
+/// Renderer-owned layout supplies the first physical page of each block; this shared planner owns
+/// table spillover and section-aware visible page-number formatting.
+/// </summary>
+public static class TableOfFiguresPageTextResolverPlanner
+{
+    public static Func<int, TableParagraphAddress?, string?>? Build(
+        TextDocument document,
+        Func<int, int?>? physicalPageOfBlock,
+        int minimumPageCount = 1)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (physicalPageOfBlock is null)
+            return null;
+
+        int? KnownPhysicalPageOfBlock(int blockIndex)
+        {
+            var observedPage = physicalPageOfBlock(blockIndex);
+            var explicitPage = CrossReferences.ExplicitPageNumberAtBlock(document, blockIndex);
+            if (observedPage is > 0)
+                return explicitPage is { } authoredPage
+                    ? Math.Max(observedPage.Value, authoredPage)
+                    : observedPage;
+            return explicitPage;
+        }
+
+        var pageCount = Math.Max(1, minimumPageCount);
+        for (var blockIndex = 0; blockIndex < document.Blocks.Count; blockIndex++)
+        {
+            var firstPage = KnownPhysicalPageOfBlock(blockIndex) ?? 1;
+            pageCount = Math.Max(
+                pageCount,
+                firstPage + DocumentViewLayoutPlanner.ResolveTablePageSpan(document, blockIndex) - 1);
+        }
+
+        var displayTextOfPhysicalPage = PageNumberFormatDialogPlanner.BuildPhysicalPageReferenceResolver(
+            document,
+            KnownPhysicalPageOfBlock,
+            pageCount);
+        return (blockIndex, tableParagraph) =>
+        {
+            var blockPage = KnownPhysicalPageOfBlock(blockIndex) ?? 1;
+            var tablePageOffset = DocumentViewLayoutPlanner.ResolveTableParagraphPageOffset(
+                document,
+                blockIndex,
+                tableParagraph);
+            return displayTextOfPhysicalPage(blockPage + (tablePageOffset ?? 0));
+        };
+    }
+}

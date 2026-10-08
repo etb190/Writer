@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- BackstageRecentFileListPlanner consumes the neutral RecentFileEntry record. -->
+    <ProjectReference Include="../Writer.Shared.AppServices/Writer.Shared.AppServices.csproj" />
+    <ProjectReference Include="../Writer.Shared.Localization/Writer.Shared.Localization.csproj" />
+    <ProjectReference Include="../Writer.Shared.Theme/Writer.Shared.Theme.csproj" />
+  </ItemGroup>
+
+</Project>

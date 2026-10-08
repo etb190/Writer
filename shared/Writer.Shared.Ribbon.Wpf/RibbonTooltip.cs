@@ -1,0 +1,134 @@
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
+using System.Windows.Media;
+using Writer.Shared.Ribbon.KeyTips;
+
+namespace Writer.Shared.Ribbon.Wpf;
+
+/// <summary>
+/// Attached properties that build an Office-style two-line tooltip (bold title + grey description)
+/// on any FrameworkElement, plus key-tip metadata and recursive submenu navigation shared by WPF hosts.
+/// </summary>
+public static class RibbonTooltip
+{
+    public static readonly DependencyProperty TitleProperty =
+        DependencyProperty.RegisterAttached("Title", typeof(string), typeof(RibbonTooltip),
+            new PropertyMetadata(null, OnChanged));
+
+    public static readonly DependencyProperty DescriptionProperty =
+        DependencyProperty.RegisterAttached("Description", typeof(string), typeof(RibbonTooltip),
+            new PropertyMetadata(null, OnChanged));
+
+    public static readonly DependencyProperty KeyTipProperty =
+        DependencyProperty.RegisterAttached("KeyTip", typeof(string), typeof(RibbonTooltip),
+            new PropertyMetadata(null, OnKeyTipChanged));
+
+    public static void SetTitle(DependencyObject o, string v) => o.SetValue(TitleProperty, v);
+    public static string? GetTitle(DependencyObject o) => (string?)o.GetValue(TitleProperty);
+
+    public static void SetDescription(DependencyObject o, string v) => o.SetValue(DescriptionProperty, v);
+    public static string? GetDescription(DependencyObject o) => (string?)o.GetValue(DescriptionProperty);
+
+    public static void SetKeyTip(DependencyObject o, string v) => o.SetValue(KeyTipProperty, v);
+    public static string? GetKeyTip(DependencyObject o) => (string?)o.GetValue(KeyTipProperty);
+
+    public static bool TryOpenSubmenuForKeyTip(ItemsControl menu, string keyTip) =>
+        TryOpenSubmenuForKeyTip(menu, keyTip, out _);
+
+    public static bool TryOpenSubmenuForKeyTip(ItemsControl menu, string keyTip, out MenuItem? openedSubmenu) =>
+        TryOpenSubmenuForKeyTip(menu, keyTip, scopePrefix: null, out openedSubmenu);
+
+    public static bool TryOpenSubmenuForKeyTip(
+        ItemsControl menu,
+        string keyTip,
+        string? scopePrefix,
+        out MenuItem? openedSubmenu)
+    {
+        ArgumentNullException.ThrowIfNull(menu);
+
+        var normalizedKeyTip = RibbonKeyTipText.Normalize(keyTip);
+        if (normalizedKeyTip is null)
+        {
+            openedSubmenu = null;
+            return false;
+        }
+
+        foreach (var item in menu.Items.OfType<MenuItem>())
+        {
+            if (!item.IsEnabled)
+                continue;
+
+            var scopedKeyTip = RibbonKeyTipText.ApplyScopePrefix(GetKeyTip(item), scopePrefix);
+            if (string.Equals(scopedKeyTip, normalizedKeyTip, StringComparison.OrdinalIgnoreCase) &&
+                item.Items.Count > 0)
+            {
+                item.IsSubmenuOpen = true;
+                openedSubmenu = item;
+                return true;
+            }
+
+            var wasOpen = item.IsSubmenuOpen;
+            if (item.Items.Count > 0)
+                item.IsSubmenuOpen = true;
+
+            if (TryOpenSubmenuForKeyTip(item, normalizedKeyTip, scopePrefix, out openedSubmenu))
+            {
+                item.IsSubmenuOpen = true;
+                if (openedSubmenu is not null)
+                    openedSubmenu.IsSubmenuOpen = true;
+                return true;
+            }
+
+            item.IsSubmenuOpen = wasOpen;
+        }
+
+        openedSubmenu = null;
+        return false;
+    }
+
+    private static void OnKeyTipChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MenuItem menuItem)
+            menuItem.InputGestureText = RibbonKeyTipText.NormalizeOrEmpty(e.NewValue as string);
+    }
+
+    private static void OnChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not FrameworkElement fe) return;
+
+        var title = GetTitle(fe);
+        var desc  = GetDescription(fe);
+        if (!string.IsNullOrWhiteSpace(title) &&
+            string.IsNullOrWhiteSpace(AutomationProperties.GetName(fe)))
+            AutomationProperties.SetName(fe, title);
+
+        if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(desc))
+        {
+            fe.ClearValue(FrameworkElement.ToolTipProperty);
+            return;
+        }
+
+        var panel = new StackPanel { MaxWidth = 270 };
+
+        if (!string.IsNullOrEmpty(title))
+            panel.Children.Add(new TextBlock
+            {
+                Text = title,
+                FontWeight = FontWeights.Bold,
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 0, string.IsNullOrEmpty(desc) ? 0 : 3)
+            });
+
+        if (!string.IsNullOrEmpty(desc))
+            panel.Children.Add(new TextBlock
+            {
+                Text = desc,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11.5,
+                Foreground = Brushes.DimGray
+            });
+
+        fe.ToolTip = new ToolTip { Content = panel };
+    }
+}

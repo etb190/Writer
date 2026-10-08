@@ -1,0 +1,920 @@
+using System.Globalization;
+using Writer.Shared.PageSetup;
+using Writer.Core.Model;
+
+namespace Writer.App.Presentation.Dialogs;
+
+public enum PageSetupGeometryMode
+{
+    PortraitInputSwappedWhenLandscape,
+    NormalizeToOrientation
+}
+
+public enum PageSetupValidationProfile
+{
+    UnifiedDialog,
+    CompactDialog
+}
+
+public enum PageSetupDialogField
+{
+    MarginTop,
+    MarginBottom,
+    MarginLeft,
+    MarginRight,
+    Gutter,
+    PageWidth,
+    PageHeight,
+    HeaderDistance,
+    FooterDistance
+}
+
+public enum PageSetupDialogFollowUp
+{
+    None,
+    LineNumbers,
+    Borders
+}
+
+public enum PageSetupDialogTabKind
+{
+    Margins,
+    Paper,
+    Layout,
+}
+
+public enum PageSetupDialogControlKind
+{
+    MarginTop,
+    MarginBottom,
+    MarginLeft,
+    MarginRight,
+    Gutter,
+    GutterPosition,
+    Orientation,
+    MultiplePages,
+    ApplyTo,
+    PaperSize,
+    PageWidth,
+    PageHeight,
+    SectionStart,
+    VerticalAlignment,
+    HeaderDistance,
+    FooterDistance,
+}
+
+public enum PageSetupDialogToggleKind
+{
+    DifferentFirstPage,
+    DifferentOddEvenPages,
+}
+
+public sealed record PageSetupDialogRowSpec(PageSetupDialogControlKind Kind, string Label);
+
+public sealed record PageSetupDialogTabSpec(
+    PageSetupDialogTabKind Kind,
+    string Header,
+    string AutomationId,
+    IReadOnlyList<PageSetupDialogRowSpec> Rows);
+
+public sealed record PageSetupDialogToggleSpec(PageSetupDialogToggleKind Kind, string Label);
+
+public sealed record PageSetupDialogLauncherSpec(PageSetupDialogFollowUp FollowUp, string Label);
+
+public sealed record PageSetupDialogSurfaceSpec(
+    string Title,
+    IReadOnlyList<PageSetupDialogTabSpec> Tabs,
+    IReadOnlyList<PageSetupDialogToggleSpec> LayoutToggles,
+    IReadOnlyList<PageSetupDialogLauncherSpec> LayoutLaunchers);
+
+public sealed record PageSetupDialogFocusPlan(
+    PageSetupDialogField Field,
+    bool SelectAllOnFocus);
+
+public readonly record struct PageSetupDialogThickness(
+    double Left,
+    double Top,
+    double Right,
+    double Bottom);
+
+public sealed record PageSetupDialogValidationPolicy(
+    PageSetupGeometryMode GeometryMode,
+    PageSetupValidationProfile ValidationProfile,
+    bool UseSelectedPaperPreset,
+    string Message);
+
+public sealed record PageSetupDialogPresentationMetrics
+{
+    public double WindowWidth { get; init; } = 420;
+    // Both hosts use the compact 24-DIP dialog control metric at the harness DPI.
+    // Keep the value in the shared contract so neither host falls back to its
+    // platform default for this dialog.
+    public double FieldHeight { get; init; } = 24;
+    public double RowInset { get; init; } = 4;
+    public double LabelFieldSpacing { get; init; } = 8;
+    public double LabelColumnWidth { get; init; } = 93;
+    public double NumberBoxMinWidth { get; init; } = 120;
+    public double ComboBoxMinWidth { get; init; } = 180;
+    public double ActionButtonWidth { get; init; } = 72;
+    public double LauncherButtonWidth { get; init; } = 110;
+    public double CheckGroupTopSpacing { get; init; } = 8;
+    public double LauncherTopSpacing { get; init; } = 10;
+    public double LauncherSpacing { get; init; } = 8;
+    public PageSetupDialogThickness TabMargin { get; init; } = new(14, 14, 14, 0);
+    public PageSetupDialogThickness ActionRowMargin { get; init; } = new(14, 12, 14, 12);
+    public PageSetupDialogThickness SecondCheckMargin { get; init; } = new(0, 4, 0, 0);
+    public PageSetupDialogThickness TabContentMargin { get; init; } = new(14, 14, 14, 14);
+    public PageSetupDialogThickness TabPaneMargin { get; init; } = new(-12, 0, -12, 0);
+    // Avalonia's selected-content template leaves a three-DIP inner edge on each
+    // side after the shared pane compensation is applied. WPF has no equivalent
+    // template inset, so the Avalonia host consumes this shared authority value.
+    public double AvaloniaTabContentInset { get; init; } = 3;
+    // Avalonia's Fluent templates measure the authority's compact WPF tab headers and action
+    // chrome differently. Keep the measured compensations beside the rest of the shared visual
+    // contract so the native renderer only projects them.
+    public IReadOnlyList<double> AvaloniaTabWidths { get; init; } = [59, 40, 48];
+    public double AvaloniaActionSpacing { get; init; } = 14;
+    public double AvaloniaActionRightInset { get; init; } = 15;
+    public double AvaloniaLauncherLeftInset { get; init; } = -1;
+    public double AvaloniaLauncherSpacing { get; init; } = 14;
+    public PageSetupDialogThickness AvaloniaValidationMargin { get; init; } = new(16, 8, 16, 0);
+    public IReadOnlyList<string> TabNames =>
+        PageSetupDialogPlanner.Surface.Tabs.Select(tab => tab.Header).ToArray();
+    public PageSetupDialogValidationPolicy Validation { get; init; } =
+        new(
+            PageSetupGeometryMode.PortraitInputSwappedWhenLandscape,
+            PageSetupValidationProfile.UnifiedDialog,
+            UseSelectedPaperPreset: false,
+            "Enter non-negative margins/distances and a positive page width and height (in points).");
+}
+
+public sealed record PageSetupPaperOption(
+    string Label,
+    double WidthPt,
+    double HeightPt)
+{
+    public bool IsCustom => WidthPt <= 0 || HeightPt <= 0;
+}
+
+public sealed record PageSetupInitialState(
+    string MarginTopText,
+    string MarginBottomText,
+    string MarginLeftText,
+    string MarginRightText,
+    string GutterText,
+    int OrientationIndex,
+    int MultiplePagesIndex,
+    string WidthText,
+    string HeightText,
+    int PaperSizeIndex,
+    int SectionStartIndex,
+    bool DifferentFirstPage,
+    bool DifferentOddEvenPages,
+    string HeaderDistanceText,
+    string FooterDistanceText,
+    int VerticalAlignmentIndex,
+    int GutterPositionIndex = 0);
+
+public sealed record PageSetupDialogInput(
+    string? MarginTopText,
+    string? MarginBottomText,
+    string? MarginLeftText,
+    string? MarginRightText,
+    string? GutterText,
+    int OrientationIndex,
+    int MultiplePagesIndex,
+    string? WidthText,
+    string? HeightText,
+    int PaperSizeIndex,
+    int SectionStartIndex,
+    bool DifferentFirstPage,
+    bool DifferentOddEvenPages,
+    string? HeaderDistanceText,
+    string? FooterDistanceText,
+    int VerticalAlignmentIndex,
+    bool UseSelectedPaperPreset,
+    PageSetupGeometryMode GeometryMode,
+    PageSetupValidationProfile ValidationProfile,
+    int GutterPositionIndex = 0);
+
+public sealed record PageSetupDialogResult(
+    double MarginTopPt,
+    double MarginBottomPt,
+    double MarginLeftPt,
+    double MarginRightPt,
+    double GutterPt,
+    bool Landscape,
+    bool MirrorMargins,
+    double WidthPt,
+    double HeightPt,
+    SectionBreakKind SectionStart,
+    bool DifferentFirstPage,
+    bool DifferentOddEvenPages,
+    double HeaderDistancePt,
+    double FooterDistancePt,
+    PageVerticalAlignment VerticalAlignment,
+    bool GutterAtTop = false);
+
+public interface IPageSetupDialogControlSource
+{
+    string? MarginTopText { get; }
+    string? MarginBottomText { get; }
+    string? MarginLeftText { get; }
+    string? MarginRightText { get; }
+    string? GutterText { get; }
+    int GutterPositionIndex { get; }
+    int OrientationIndex { get; }
+    int MultiplePagesIndex { get; }
+    string? WidthText { get; }
+    string? HeightText { get; }
+    int PaperSizeIndex { get; }
+    int SectionStartIndex { get; }
+    bool DifferentFirstPage { get; }
+    bool DifferentOddEvenPages { get; }
+    string? HeaderDistanceText { get; }
+    string? FooterDistanceText { get; }
+    int VerticalAlignmentIndex { get; }
+}
+
+public sealed record PageSetupDialogControlState(
+    string? MarginTopText,
+    string? MarginBottomText,
+    string? MarginLeftText,
+    string? MarginRightText,
+    string? GutterText,
+    int GutterPositionIndex,
+    int OrientationIndex,
+    int MultiplePagesIndex,
+    string? WidthText,
+    string? HeightText,
+    int PaperSizeIndex,
+    int SectionStartIndex,
+    bool DifferentFirstPage,
+    bool DifferentOddEvenPages,
+    string? HeaderDistanceText,
+    string? FooterDistanceText,
+    int VerticalAlignmentIndex);
+
+public sealed record PageSetupDialogEnabledState(
+    bool WidthEnabled,
+    bool HeightEnabled);
+
+public sealed record PageSetupPaperSelectionPlan(
+    string? WidthText,
+    string? HeightText,
+    bool UpdateDimensions,
+    PageSetupDialogEnabledState EnabledState);
+
+public sealed record PageSetupDimensionEditPlan(
+    int PaperSizeIndex,
+    bool UpdatePaperSize,
+    PageSetupDialogEnabledState EnabledState);
+
+public sealed record PageSetupDialogAcceptance(
+    PageSetupDialogResult? Result,
+    string? ErrorMessage,
+    PageSetupDialogFocusPlan? FocusPlan = null,
+    PageSetupDialogFollowUp FollowUp = PageSetupDialogFollowUp.None)
+{
+    public bool IsAccepted => Result is not null && ErrorMessage is null;
+}
+
+/// <summary>
+/// Owns the neutral Page Setup interaction state for the paired desktop dialogs. Renderers expose
+/// scalar control values and apply the returned projections while retaining native controls and chrome.
+/// </summary>
+public sealed class PageSetupDialogSession
+{
+    // Named paper dimensions stay editable; typing a dimension projects the selection to Custom.
+    private static readonly PageSetupDialogEnabledState EditableDimensions = new(true, true);
+    private static readonly PageSetupDialogFocusPlan InitialMarginFocus =
+        new(PageSetupDialogField.MarginTop, SelectAllOnFocus: true);
+
+    private readonly CultureInfo _culture;
+    private readonly PageSetupDialogValidationPolicy _validation;
+
+    internal PageSetupDialogSession(
+        PageSettings page,
+        SectionBreakKind sectionStart,
+        IReadOnlyList<PageSetupPaperOption> paperOptions,
+        PageSetupDialogValidationPolicy validation,
+        CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(paperOptions);
+        ArgumentNullException.ThrowIfNull(validation);
+        ArgumentNullException.ThrowIfNull(culture);
+
+        PaperOptions = paperOptions.ToArray();
+        _validation = validation;
+        _culture = culture;
+        InitialState = PageSetupDialogPlanner.BuildInitialState(
+            page,
+            sectionStart,
+            PaperOptions,
+            validation.GeometryMode,
+            culture);
+    }
+
+    public IReadOnlyList<PageSetupPaperOption> PaperOptions { get; }
+
+    public PageSetupInitialState InitialState { get; }
+
+    public PageSetupDialogEnabledState EnabledState => EditableDimensions;
+
+    public PageSetupDialogFocusPlan InitialFocusPlan => InitialMarginFocus;
+
+    public PageSetupPaperSelectionPlan PlanPaperSelection(int selectedIndex)
+    {
+        var preset = PageSetupDialogPlanner.ApplyPaperPreset(PaperOptions, selectedIndex, _culture);
+        return preset is null
+            ? new PageSetupPaperSelectionPlan(null, null, UpdateDimensions: false, EditableDimensions)
+            : new PageSetupPaperSelectionPlan(
+                preset.Value.WidthText,
+                preset.Value.HeightText,
+                UpdateDimensions: true,
+                EditableDimensions);
+    }
+
+    public PageSetupDimensionEditPlan PlanDimensionEdit(
+        string? widthText,
+        string? heightText,
+        int currentPaperSizeIndex)
+    {
+        // r551: a page dimension that is not finite is not a dimension.
+        if (!double.TryParse(widthText, NumberStyles.Float, _culture, out var width) ||
+            !double.TryParse(heightText, NumberStyles.Float, _culture, out var height) ||
+            !double.IsFinite(width) || !double.IsFinite(height))
+        {
+            return new PageSetupDimensionEditPlan(
+                currentPaperSizeIndex,
+                UpdatePaperSize: false,
+                EditableDimensions);
+        }
+
+        return new PageSetupDimensionEditPlan(
+            PageSetupDialogPlanner.PaperIndexFor(PaperOptions, width, height),
+            UpdatePaperSize: true,
+            EditableDimensions);
+    }
+
+    public PageSetupDialogControlState ProjectControlState(IPageSetupDialogControlSource source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return new PageSetupDialogControlState(
+            source.MarginTopText,
+            source.MarginBottomText,
+            source.MarginLeftText,
+            source.MarginRightText,
+            source.GutterText,
+            source.GutterPositionIndex,
+            source.OrientationIndex,
+            source.MultiplePagesIndex,
+            source.WidthText,
+            source.HeightText,
+            source.PaperSizeIndex,
+            source.SectionStartIndex,
+            source.DifferentFirstPage,
+            source.DifferentOddEvenPages,
+            source.HeaderDistanceText,
+            source.FooterDistanceText,
+            source.VerticalAlignmentIndex);
+    }
+
+    public PageSetupDialogAcceptance PlanAcceptance(
+        IPageSetupDialogControlSource source,
+        PageSetupDialogFollowUp followUp = PageSetupDialogFollowUp.None) =>
+        PlanAcceptance(ProjectControlState(source), followUp);
+
+    public PageSetupDialogAcceptance PlanAcceptance(
+        PageSetupDialogControlState state,
+        PageSetupDialogFollowUp followUp = PageSetupDialogFollowUp.None)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var input = new PageSetupDialogInput(
+            state.MarginTopText,
+            state.MarginBottomText,
+            state.MarginLeftText,
+            state.MarginRightText,
+            state.GutterText,
+            state.OrientationIndex,
+            state.MultiplePagesIndex,
+            state.WidthText,
+            state.HeightText,
+            state.PaperSizeIndex,
+            state.SectionStartIndex,
+            state.DifferentFirstPage,
+            state.DifferentOddEvenPages,
+            state.HeaderDistanceText,
+            state.FooterDistanceText,
+            state.VerticalAlignmentIndex,
+            _validation.UseSelectedPaperPreset,
+            _validation.GeometryMode,
+            _validation.ValidationProfile,
+            state.GutterPositionIndex);
+
+        return PageSetupDialogPlanner.TryBuildResultCore(
+            input,
+            PaperOptions,
+            _culture,
+            out var result,
+            out var error,
+            out var invalidField)
+            ? new PageSetupDialogAcceptance(result, ErrorMessage: null, FocusPlan: null, followUp)
+            : new PageSetupDialogAcceptance(
+                Result: null,
+                error ?? _validation.Message,
+                new PageSetupDialogFocusPlan(
+                    invalidField ?? PageSetupDialogField.MarginTop,
+                    SelectAllOnFocus: true));
+    }
+}
+
+public static class PageSetupDialogPlanner
+{
+    public static PageSetupDialogPresentationMetrics PresentationMetrics { get; } = new();
+
+    // The visual harness must seed both hosts with the same explicit section-start
+    // value. Production entry points retain their NextPage default independently.
+    public const SectionBreakKind VisualHarnessSectionStart = SectionBreakKind.NextPage;
+
+    public const string Title = "Page Setup";
+    public const string MarginsSectionLabel = "Margins (points)";
+    public const string TopMarginLabel = "Top (pt):";
+    public const string BottomMarginLabel = "Bottom (pt):";
+    public const string LeftMarginLabel = "Left (pt):";
+    public const string RightMarginLabel = "Right (pt):";
+    public const string GutterLabel = "Gutter (pt):";
+    public const string GutterPositionLabel = "Gutter position:";
+    public const string OrientationLabel = "Orientation:";
+    public const string MultiplePagesLabel = "Multiple pages:";
+    public const string ApplyToLabel = "Apply to:";
+    public static readonly IReadOnlyList<string> GutterPositionNames = ["Left", "Top"];
+    public const string OrientationSectionLabel = "Orientation";
+    public const string PaperSizeSectionLabel = "Paper Size";
+    public const string PaperSizeLabel = "Paper size:";
+    public const string CustomWidthLabel = "Width (pt):";
+    public const string CustomHeightLabel = "Height (pt):";
+    public const string SectionStartLabel = "Section start:";
+    public const string VerticalAlignmentLabel = "Vertical alignment:";
+    public const string HeaderDistanceLabel = "Header from edge (pt):";
+    public const string FooterDistanceLabel = "Footer from edge (pt):";
+    public const string DifferentFirstPageLabel = "Different first page";
+    public const string DifferentOddEvenLabel = "Different odd and even";
+    public const string LineNumbersLabel = "Line Numbers\u2026";
+    public const string BordersLabel = "Borders\u2026";
+    public const string OkButton = "OK";
+    public const string CancelButton = "Cancel";
+    public const string UnifiedValidationMessage =
+        "Enter non-negative margins/distances and a positive page width and height (in points).";
+    public const double DefaultHeaderDistancePt = 36;
+    public const double DefaultFooterDistancePt = 36;
+
+    public static PageSetupDialogSurfaceSpec Surface { get; } = new(
+        Title,
+        [
+            new(
+                PageSetupDialogTabKind.Margins,
+                "Margins",
+                "PageSetupMarginsTab",
+                [
+                    new(PageSetupDialogControlKind.MarginTop, TopMarginLabel),
+                    new(PageSetupDialogControlKind.MarginBottom, BottomMarginLabel),
+                    new(PageSetupDialogControlKind.MarginLeft, LeftMarginLabel),
+                    new(PageSetupDialogControlKind.MarginRight, RightMarginLabel),
+                    new(PageSetupDialogControlKind.Gutter, GutterLabel),
+                    new(PageSetupDialogControlKind.GutterPosition, GutterPositionLabel),
+                    new(PageSetupDialogControlKind.Orientation, OrientationLabel),
+                    new(PageSetupDialogControlKind.MultiplePages, MultiplePagesLabel),
+                    new(PageSetupDialogControlKind.ApplyTo, ApplyToLabel),
+                ]),
+            new(
+                PageSetupDialogTabKind.Paper,
+                "Paper",
+                "PageSetupPaperTab",
+                [
+                    new(PageSetupDialogControlKind.PaperSize, PaperSizeLabel),
+                    new(PageSetupDialogControlKind.PageWidth, CustomWidthLabel),
+                    new(PageSetupDialogControlKind.PageHeight, CustomHeightLabel),
+                ]),
+            new(
+                PageSetupDialogTabKind.Layout,
+                "Layout",
+                "PageSetupLayoutTab",
+                [
+                    new(PageSetupDialogControlKind.SectionStart, SectionStartLabel),
+                    new(PageSetupDialogControlKind.VerticalAlignment, VerticalAlignmentLabel),
+                    new(PageSetupDialogControlKind.HeaderDistance, HeaderDistanceLabel),
+                    new(PageSetupDialogControlKind.FooterDistance, FooterDistanceLabel),
+                ]),
+        ],
+        [
+            new(PageSetupDialogToggleKind.DifferentFirstPage, DifferentFirstPageLabel),
+            new(PageSetupDialogToggleKind.DifferentOddEvenPages, DifferentOddEvenLabel),
+        ],
+        [
+            new(PageSetupDialogFollowUp.LineNumbers, LineNumbersLabel),
+            new(PageSetupDialogFollowUp.Borders, BordersLabel),
+        ]);
+
+    /// <summary>The "Custom" row is a dialog affordance, not a named paper size, so it stays app-side.</summary>
+    private static readonly PageSetupPaperOption CustomPaperOption = new("Custom", 0, 0);
+
+    /// <summary>
+    /// Builds a paper row from the cross-app <see cref="PaperSizeCatalog"/>. Writer keeps its own label
+    /// wording (and its own per-surface size list); only the point dimensions are shared.
+    /// </summary>
+    private static PageSetupPaperOption Paper(SharedPaperSize size, string label)
+    {
+        var (widthPt, heightPt) = PaperSizeCatalog.GetSizePoints(size);
+        return new PageSetupPaperOption(label, widthPt, heightPt);
+    }
+
+    public static readonly IReadOnlyList<PageSetupPaperOption> PaperOptions =
+    [
+        Paper(SharedPaperSize.Letter, "Letter (8.5\" x 11\")"),
+        Paper(SharedPaperSize.Legal, "Legal (8.5\" x 14\")"),
+        Paper(SharedPaperSize.Tabloid, "Tabloid (11\" x 17\")"),
+        Paper(SharedPaperSize.A3, "A3 (29.7cm x 42cm)"),
+        Paper(SharedPaperSize.A4, "A4 (21cm x 29.7cm)"),
+        Paper(SharedPaperSize.A5, "A5 (14.8cm x 21cm)"),
+        Paper(SharedPaperSize.B4, "B4 (25cm x 35.3cm)"),
+        Paper(SharedPaperSize.B5, "B5 (17.6cm x 25cm)"),
+        CustomPaperOption,
+    ];
+
+    public static readonly IReadOnlyList<string> OrientationNames = ["Portrait", "Landscape"];
+    public static readonly IReadOnlyList<string> MultiplePagesNames = ["Normal", "Mirror margins"];
+    public static readonly IReadOnlyList<string> ApplyToNames = ["Whole document", "This section"];
+    public static readonly IReadOnlyList<string> SectionStartNames = ["Continuous", "New page", "Even page", "Odd page"];
+    public static readonly IReadOnlyList<SectionBreakKind> SectionStartValues =
+        [SectionBreakKind.Continuous, SectionBreakKind.NextPage, SectionBreakKind.EvenPage, SectionBreakKind.OddPage];
+    public static readonly IReadOnlyList<string> VerticalAlignmentNames = ["Top", "Center", "Justified", "Bottom"];
+    public static readonly IReadOnlyList<PageVerticalAlignment> VerticalAlignmentValues =
+        [PageVerticalAlignment.Top, PageVerticalAlignment.Center, PageVerticalAlignment.Justified, PageVerticalAlignment.Bottom];
+
+    public static PageSetupDialogSession CreateSession(
+        PageSettings page,
+        SectionBreakKind sectionStart,
+        CultureInfo culture) =>
+        new(page, sectionStart, PaperOptions, PresentationMetrics.Validation, culture);
+
+    public static PageSetupInitialState BuildInitialState(
+        PageSettings page,
+        SectionBreakKind sectionStart,
+        IReadOnlyList<PageSetupPaperOption> paperOptions,
+        PageSetupGeometryMode geometryMode,
+        CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(paperOptions);
+        ArgumentNullException.ThrowIfNull(culture);
+
+        var (displayWidth, displayHeight) = DisplayGeometry(page, geometryMode);
+        return new PageSetupInitialState(
+            MarginTopText: FormatPoints(page.MarginTopPt, culture),
+            MarginBottomText: FormatPoints(page.MarginBottomPt, culture),
+            MarginLeftText: FormatPoints(page.MarginLeftPt, culture),
+            MarginRightText: FormatPoints(page.MarginRightPt, culture),
+            GutterText: FormatPoints(page.GutterPt, culture),
+            OrientationIndex: page.Landscape ? 1 : 0,
+            MultiplePagesIndex: page.MirrorMargins ? 1 : 0,
+            WidthText: FormatPoints(displayWidth, culture),
+            HeightText: FormatPoints(displayHeight, culture),
+            PaperSizeIndex: geometryMode == PageSetupGeometryMode.NormalizeToOrientation
+                ? PaperIndexForNormalized(paperOptions, displayWidth, displayHeight)
+                : PaperIndexFor(paperOptions, displayWidth, displayHeight),
+            SectionStartIndex: Math.Max(0, IndexOf(SectionStartValues, sectionStart)),
+            DifferentFirstPage: page.DifferentFirstPage,
+            DifferentOddEvenPages: page.DifferentOddEvenPages,
+            HeaderDistanceText: FormatPoints(
+                page.HeaderDistancePt > 0 ? page.HeaderDistancePt : DefaultHeaderDistancePt,
+                culture),
+            FooterDistanceText: FormatPoints(
+                page.FooterDistancePt > 0 ? page.FooterDistancePt : DefaultFooterDistancePt,
+                culture),
+            VerticalAlignmentIndex: Math.Max(0, IndexOf(VerticalAlignmentValues, page.VerticalAlignment)),
+            GutterPositionIndex: page.GutterAtTop ? 1 : 0);
+    }
+
+    public static int PaperIndexFor(
+        IReadOnlyList<PageSetupPaperOption> paperOptions,
+        double widthPt,
+        double heightPt,
+        double tolerancePt = 1)
+    {
+        ArgumentNullException.ThrowIfNull(paperOptions);
+
+        for (var i = 0; i < paperOptions.Count; i++)
+        {
+            var option = paperOptions[i];
+            if (option.IsCustom)
+                continue;
+
+            if (Math.Abs(option.WidthPt - widthPt) < tolerancePt &&
+                Math.Abs(option.HeightPt - heightPt) < tolerancePt)
+            {
+                return i;
+            }
+        }
+
+        return CustomIndex(paperOptions);
+    }
+
+    public static int PaperIndexForNormalized(
+        IReadOnlyList<PageSetupPaperOption> paperOptions,
+        double widthPt,
+        double heightPt,
+        double tolerancePt = 1.5)
+    {
+        ArgumentNullException.ThrowIfNull(paperOptions);
+
+        var (shortPt, longPt) = PageOrientationRules.ToPortrait(widthPt, heightPt);
+        for (var i = 0; i < paperOptions.Count; i++)
+        {
+            var option = paperOptions[i];
+            if (option.IsCustom)
+                continue;
+
+            var (optionShort, optionLong) = PageOrientationRules.ToPortrait(option.WidthPt, option.HeightPt);
+            if (Math.Abs(optionShort - shortPt) < tolerancePt &&
+                Math.Abs(optionLong - longPt) < tolerancePt)
+            {
+                return i;
+            }
+        }
+
+        return CustomIndex(paperOptions);
+    }
+
+    public static (string WidthText, string HeightText)? ApplyPaperPreset(
+        IReadOnlyList<PageSetupPaperOption> paperOptions,
+        int selectedIndex,
+        CultureInfo culture)
+    {
+        ArgumentNullException.ThrowIfNull(paperOptions);
+        ArgumentNullException.ThrowIfNull(culture);
+
+        if (selectedIndex < 0 || selectedIndex >= paperOptions.Count)
+            return null;
+
+        var option = paperOptions[selectedIndex];
+        return option.IsCustom
+            ? null
+            : (FormatPoints(option.WidthPt, culture), FormatPoints(option.HeightPt, culture));
+    }
+
+    public static bool TryBuildResult(
+        PageSetupDialogInput input,
+        IReadOnlyList<PageSetupPaperOption> paperOptions,
+        CultureInfo culture,
+        out PageSetupDialogResult? result,
+        out string? errorMessage) =>
+        TryBuildResultCore(
+            input,
+            paperOptions,
+            culture,
+            out result,
+            out errorMessage,
+            out _);
+
+    internal static bool TryBuildResultCore(
+        PageSetupDialogInput input,
+        IReadOnlyList<PageSetupPaperOption> paperOptions,
+        CultureInfo culture,
+        out PageSetupDialogResult? result,
+        out string? errorMessage,
+        out PageSetupDialogField? invalidField)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(paperOptions);
+        ArgumentNullException.ThrowIfNull(culture);
+
+        result = null;
+        errorMessage = null;
+        invalidField = null;
+
+        if (!TryParseNonNegative(input.MarginTopText, "Top margin", input.ValidationProfile, culture, out var top, out errorMessage))
+            return Reject(PageSetupDialogField.MarginTop, input.ValidationProfile, ref errorMessage, out invalidField);
+        if (!TryParseNonNegative(input.MarginBottomText, "Bottom margin", input.ValidationProfile, culture, out var bottom, out errorMessage))
+            return Reject(PageSetupDialogField.MarginBottom, input.ValidationProfile, ref errorMessage, out invalidField);
+        if (!TryParseNonNegative(input.MarginLeftText, "Left margin", input.ValidationProfile, culture, out var left, out errorMessage))
+            return Reject(PageSetupDialogField.MarginLeft, input.ValidationProfile, ref errorMessage, out invalidField);
+        if (!TryParseNonNegative(input.MarginRightText, "Right margin", input.ValidationProfile, culture, out var right, out errorMessage))
+            return Reject(PageSetupDialogField.MarginRight, input.ValidationProfile, ref errorMessage, out invalidField);
+        if (!TryParseNonNegative(input.GutterText, "Gutter", input.ValidationProfile, culture, out var gutter, out errorMessage))
+            return Reject(PageSetupDialogField.Gutter, input.ValidationProfile, ref errorMessage, out invalidField);
+        if (!TryResolvePaperSize(
+                input,
+                paperOptions,
+                culture,
+                out var width,
+                out var height,
+                out errorMessage,
+                out invalidField))
+        {
+            NormalizeValidationMessage(input.ValidationProfile, ref errorMessage);
+            return false;
+        }
+        if (!TryParseNonNegative(input.HeaderDistanceText, "Header distance", input.ValidationProfile, culture, out var headerDistance, out errorMessage))
+            return Reject(PageSetupDialogField.HeaderDistance, input.ValidationProfile, ref errorMessage, out invalidField);
+        if (!TryParseNonNegative(input.FooterDistanceText, "Footer distance", input.ValidationProfile, culture, out var footerDistance, out errorMessage))
+            return Reject(PageSetupDialogField.FooterDistance, input.ValidationProfile, ref errorMessage, out invalidField);
+
+        var landscape = input.OrientationIndex == 1;
+        var (storedWidth, storedHeight) = StoreGeometry(width, height, landscape, input.GeometryMode);
+
+        result = new PageSetupDialogResult(
+            MarginTopPt: top,
+            MarginBottomPt: bottom,
+            MarginLeftPt: left,
+            MarginRightPt: right,
+            GutterPt: gutter,
+            Landscape: landscape,
+            MirrorMargins: input.MultiplePagesIndex == 1,
+            WidthPt: storedWidth,
+            HeightPt: storedHeight,
+            SectionStart: ValueAtOrDefault(SectionStartValues, input.SectionStartIndex),
+            DifferentFirstPage: input.DifferentFirstPage,
+            DifferentOddEvenPages: input.DifferentOddEvenPages,
+            HeaderDistancePt: headerDistance,
+            FooterDistancePt: footerDistance,
+            VerticalAlignment: ValueAtOrDefault(VerticalAlignmentValues, input.VerticalAlignmentIndex),
+            GutterAtTop: input.GutterPositionIndex == 1);
+        return true;
+    }
+
+    public static void ApplyToPageSettings(PageSettings page, PageSetupDialogResult result)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(result);
+
+        page.MarginTopPt = result.MarginTopPt;
+        page.MarginBottomPt = result.MarginBottomPt;
+        page.MarginLeftPt = result.MarginLeftPt;
+        page.MarginRightPt = result.MarginRightPt;
+        page.GutterPt = result.GutterPt;
+        page.GutterAtTop = result.GutterAtTop;
+        page.Landscape = result.Landscape;
+        page.MirrorMargins = result.MirrorMargins;
+        page.WidthPt = result.WidthPt;
+        page.HeightPt = result.HeightPt;
+        page.DifferentFirstPage = result.DifferentFirstPage;
+        page.DifferentOddEvenPages = result.DifferentOddEvenPages;
+        page.HeaderDistancePt = result.HeaderDistancePt;
+        page.FooterDistancePt = result.FooterDistancePt;
+        page.VerticalAlignment = result.VerticalAlignment;
+    }
+
+    public static string FormatPoints(double value, CultureInfo culture) =>
+        PageMarginTextPolicy.Format(value, culture);
+
+    public static int CustomIndex(IReadOnlyList<PageSetupPaperOption> paperOptions)
+    {
+        ArgumentNullException.ThrowIfNull(paperOptions);
+
+        for (var i = 0; i < paperOptions.Count; i++)
+        {
+            if (paperOptions[i].IsCustom)
+                return i;
+        }
+
+        return Math.Max(0, paperOptions.Count - 1);
+    }
+
+    private static bool TryResolvePaperSize(
+        PageSetupDialogInput input,
+        IReadOnlyList<PageSetupPaperOption> paperOptions,
+        CultureInfo culture,
+        out double width,
+        out double height,
+        out string? errorMessage,
+        out PageSetupDialogField? invalidField)
+    {
+        width = 0;
+        height = 0;
+        errorMessage = null;
+        invalidField = null;
+
+        if (input.UseSelectedPaperPreset &&
+            input.PaperSizeIndex >= 0 &&
+            input.PaperSizeIndex < paperOptions.Count &&
+            !paperOptions[input.PaperSizeIndex].IsCustom)
+        {
+            var option = paperOptions[input.PaperSizeIndex];
+            (width, height) = PageOrientationRules.ToPortrait(option.WidthPt, option.HeightPt);
+            return true;
+        }
+
+        if (!TryParsePositive(input.WidthText, "Paper width", input.ValidationProfile, culture, out width, out errorMessage))
+        {
+            invalidField = PageSetupDialogField.PageWidth;
+            return false;
+        }
+
+        if (!TryParsePositive(input.HeightText, "Paper height", input.ValidationProfile, culture, out height, out errorMessage))
+        {
+            invalidField = PageSetupDialogField.PageHeight;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool Reject(
+        PageSetupDialogField field,
+        PageSetupValidationProfile profile,
+        ref string? errorMessage,
+        out PageSetupDialogField? invalidField)
+    {
+        invalidField = field;
+        NormalizeValidationMessage(profile, ref errorMessage);
+        return false;
+    }
+
+    private static void NormalizeValidationMessage(
+        PageSetupValidationProfile profile,
+        ref string? errorMessage)
+    {
+        if (profile == PageSetupValidationProfile.UnifiedDialog)
+            errorMessage = UnifiedValidationMessage;
+    }
+
+    private static bool TryParseNonNegative(
+        string? text,
+        string field,
+        PageSetupValidationProfile profile,
+        CultureInfo culture,
+        out double value,
+        out string? errorMessage)
+    {
+        value = 0;
+        errorMessage = null;
+        var t = (text ?? string.Empty).Trim();
+
+        // Compact dialog only: a blank box means "zero", so it short-circuits before the shared rule.
+        if (profile == PageSetupValidationProfile.CompactDialog && t.Length == 0)
+            return true;
+
+        if (!PageMarginTextPolicy.TryParseNonNegative(t, culture, out value))
+        {
+            value = 0;
+            errorMessage = profile == PageSetupValidationProfile.CompactDialog
+                ? $"Invalid value for {field}: \"{t}\". Enter a non-negative number."
+                : UnifiedValidationMessage;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryParsePositive(
+        string? text,
+        string field,
+        PageSetupValidationProfile profile,
+        CultureInfo culture,
+        out double value,
+        out string? errorMessage)
+    {
+        errorMessage = null;
+        var t = (text ?? string.Empty).Trim();
+        if (!PageMarginTextPolicy.TryParsePositive(t, culture, out value))
+        {
+            errorMessage = profile == PageSetupValidationProfile.CompactDialog
+                ? $"Invalid value for {field}: \"{t}\". Enter a positive number."
+                : UnifiedValidationMessage;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static (double WidthPt, double HeightPt) DisplayGeometry(PageSettings page, PageSetupGeometryMode geometryMode) =>
+        PageOrientationRules.ApplySwapWhenLandscape(
+            page.WidthPt,
+            page.HeightPt,
+            geometryMode == PageSetupGeometryMode.PortraitInputSwappedWhenLandscape && page.Landscape);
+
+    private static (double WidthPt, double HeightPt) StoreGeometry(
+        double widthPt,
+        double heightPt,
+        bool landscape,
+        PageSetupGeometryMode geometryMode) =>
+        geometryMode == PageSetupGeometryMode.PortraitInputSwappedWhenLandscape
+            ? PageOrientationRules.ApplySwapWhenLandscape(widthPt, heightPt, landscape)
+            : PageOrientationRules.NormalizeToOrientation(widthPt, heightPt, landscape);
+
+    private static int IndexOf<T>(IReadOnlyList<T> values, T value)
+    {
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (EqualityComparer<T>.Default.Equals(values[i], value))
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static T ValueAtOrDefault<T>(IReadOnlyList<T> values, int index) =>
+        values[Math.Clamp(index, 0, values.Count - 1)];
+}

@@ -1,0 +1,67 @@
+using Writer.Core.Model;
+
+namespace Writer.App.Presentation.DocumentView;
+
+/// <summary>
+/// Plans block-level Insert-tab mutations from model coordinates. Native renderers resolve their caret
+/// to a body block, while placement, generated model content, and atomic replacement semantics live here.
+/// </summary>
+public static class DocumentBlockInsertionMutationPlanner
+{
+    public static DocumentBlockReplacementPlan PlanCoverPage(
+        TextDocument document,
+        CoverPagePreset preset = CoverPagePreset.Default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return new DocumentBlockReplacementPlan(0, 0, DocumentOps.BuildCoverPage(document, preset));
+    }
+
+    public static DocumentBlockReplacementPlan PlanPageBreak(TextDocument document, int caretBlockIndex) =>
+        PlanAfterCaret(document, caretBlockIndex, [DocumentOps.CreatePageBreak()]);
+
+    public static DocumentBlockReplacementPlan PlanBlankPage(TextDocument document, int caretBlockIndex) =>
+        PlanAfterCaret(document, caretBlockIndex, DocumentOps.BuildBlankPage());
+
+    public static DocumentBlockReplacementPlan PlanHorizontalRule(TextDocument document, int caretBlockIndex) =>
+        PlanAfterCaret(document, caretBlockIndex, [DocumentOps.CreateHorizontalRule()]);
+
+    public static DocumentBlockReplacementPlan PlanColumnBreak(TextDocument document, int caretBlockIndex) =>
+        PlanAfterCaret(document, caretBlockIndex, [DocumentOps.CreateColumnBreak()]);
+
+    /// <summary>
+    /// The new section-break paragraph inherits the <see cref="PageSettings"/> of the section
+    /// <paramref name="caretBlockIndex"/> is actually in (resolved via
+    /// <see cref="PageSettingsSectionResolver"/>), not unconditionally the document's final section
+    /// (<see cref="TextDocument.Page"/>) -- and likewise inherits that section's effective header/footer
+    /// (see <see cref="DocumentOps.ResolveInheritedHeadersFooters"/>), so splitting off a leading section
+    /// does not blank the header/footer that was showing on it. Mirrors
+    /// <c>Writer.App.Host.Editing.DocumentView.InsertSectionBreak</c> and
+    /// <c>Writer.App.Avalonia.Editing.DocumentView.InsertSectionBreak</c>, the WPF- and Avalonia-hosted
+    /// equivalents of this same gesture.
+    /// </summary>
+    public static DocumentBlockReplacementPlan PlanSectionBreak(
+        TextDocument document,
+        int caretBlockIndex,
+        SectionBreakKind breakKind)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var sectionIndex = PageSettingsSectionResolver.ResolveSectionIndex(document, caretBlockIndex);
+        var inheritedPage = PageSettingsSectionResolver.Resolve(document, sectionIndex);
+        var inheritedHeadersFooters = DocumentOps.ResolveInheritedHeadersFooters(document, sectionIndex);
+        return PlanAfterCaret(
+            document,
+            caretBlockIndex,
+            [DocumentOps.CreateSectionBreak(breakKind, inheritedPage, inheritedHeadersFooters)]);
+    }
+
+    private static DocumentBlockReplacementPlan PlanAfterCaret(
+        TextDocument document,
+        int caretBlockIndex,
+        IReadOnlyList<Block> blocks)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(blocks);
+        var insertIndex = (int)Math.Clamp((long)caretBlockIndex + 1, 0L, document.Blocks.Count);
+        return new DocumentBlockReplacementPlan(insertIndex, 0, blocks);
+    }
+}

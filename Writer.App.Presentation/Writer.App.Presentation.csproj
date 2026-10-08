@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Writer.Core.Model/Writer.Core.Model.csproj" />
+    <ProjectReference Include="../Writer.Core.IO/Writer.Core.IO.csproj" />
+    <ProjectReference Include="../Writer.App.Localization/Writer.App.Localization.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Drawing/Writer.Shared.Drawing.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Shell/Writer.Shared.Shell.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.AppServices/Writer.Shared.AppServices.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Theme/Writer.Shared.Theme.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Ribbon/Writer.Shared.Ribbon.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.IO/Writer.Shared.IO.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.PageSetup/Writer.Shared.PageSetup.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Pdf/Writer.Shared.Pdf.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Localization/Writer.Shared.Localization.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Writer.Shared.IO" />
+    <Using Include="Writer.Shared.AppServices" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources/thesaurus-en.txt"
+                      LogicalName="Writer.App.Presentation.Resources.thesaurus-en.txt" />
+  </ItemGroup>
+
+</Project>

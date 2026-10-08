@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Writer.Shared.Shell.Avalonia</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Writer.Shared.AppServices/Writer.Shared.AppServices.csproj" />
+    <ProjectReference Include="../Writer.Shared.IO/Writer.Shared.IO.csproj" />
+    <ProjectReference Include="../Writer.Shared.Ribbon/Writer.Shared.Ribbon.csproj" />
+    <ProjectReference Include="../Writer.Shared.Shell/Writer.Shared.Shell.csproj" />
+    <ProjectReference Include="../Writer.Shared.Theme/Writer.Shared.Theme.csproj" />
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Fonts.Inter" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Writer.App.Avalonia.Tests" />
+    <InternalsVisibleTo Include="Writer.Shared.Shell.Avalonia.Tests" />
+  </ItemGroup>
+
+</Project>

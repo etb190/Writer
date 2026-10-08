@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Neutral draw-op model lives in Writer.Shared.Pdf; this companion adds the SkiaSharp emitter
+         (HarfBuzz shaping + automatic font embedding/subsetting) so non-WinAnsi text exports
+         without bundling a font. Mirrors the Writer.Shared.Shell / Writer.Shared.Shell.Wpf split. -->
+    <ProjectReference Include="../Writer.Shared.Pdf/Writer.Shared.Pdf.csproj" />
+    <ProjectReference Include="../Writer.Shared.Drawing/Writer.Shared.Drawing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Writer.Shared.Pdf.Tests" />
+    <InternalsVisibleTo Include="Writer.Shared.Pdf.Skia.Tests" />
+  </ItemGroup>
+
+</Project>

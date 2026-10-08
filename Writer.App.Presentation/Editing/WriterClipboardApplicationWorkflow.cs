@@ -1,0 +1,834 @@
+using System.Buffers.Binary;
+using System.Text;
+using Writer.Shared.AppServices;
+using Writer.App.Presentation.Dialogs;
+using Writer.App.Presentation.DocumentView;
+using Writer.Core.IO;
+using Writer.Core.Model;
+
+namespace Writer.App.Presentation.Editing;
+
+public enum WriterClipboardTransferStatus
+{
+    Succeeded,
+    Empty,
+    Unavailable,
+    Unsupported,
+    Failed,
+}
+
+public sealed record WriterClipboardPayload(
+    string? Text,
+    TextDocument? RichDocument,
+    // writer-clip-image-text (R159): true only when RichDocument was synthesised from a clipboard
+    // bitmap (see TryBuildImageDocument) rather than parsed from HTML/RTF. An HTML/RTF RichDocument
+    // already folds the clipboard's Text into itself, so the two are redundant; a synthesised image
+    // document carries none of Text, so the two are independent content and neither may be dropped.
+    bool RichDocumentIsSynthesizedImage = false)
+{
+    public bool HasText => PasteText.Normalize(Text).Length > 0;
+
+    public bool HasContent => HasText || RichDocument is not null;
+}
+
+public sealed record WriterClipboardTransferResult(
+    WriterClipboardTransferStatus Status,
+    WriterClipboardPayload? Payload = null,
+    string? FeedbackMessage = null)
+{
+    public bool IsSuccess => Status == WriterClipboardTransferStatus.Succeeded;
+
+    // The existing shells treat an unavailable clipboard as a valid local cut.
+    public bool CanCommitCut => IsSuccess || Status == WriterClipboardTransferStatus.Unavailable;
+}
+
+public sealed record WriterClipboardPastePlan(
+    DocumentPasteTextKind TextKind,
+    string? Text,
+    TextDocument? RichDocument,
+    // writer-clip-image-text (R159): carried through from WriterClipboardPayload -- see that type for why
+    // this, and only this, case must also apply Text after a successful RichDocument paste.
+    bool RichDocumentIsSynthesizedImage = false)
+{
+    public bool PreferRichDocument => RichDocument is not null;
+}
+
+/// <summary>
+/// Owns renderer-neutral clipboard transfer decisions for the Writer application shell. Native adapters
+/// provide clipboard transport and realize the returned text or document in their editor controls.
+/// </summary>
+public static class WriterClipboardApplicationWorkflow
+{
+    public const string RichTextFormat = "Rich Text Format";
+    public const string EmptyClipboardMessage = "Clipboard does not contain text.";
+    public const string ClipboardUnavailableMessage = "The clipboard is unavailable.";
+    public const string ClipboardUnsupportedMessage = "This clipboard operation is not supported.";
+    public const string ClipboardFailureMessage = "The clipboard operation failed.";
+
+    /// <summary>
+    /// The clipboard failure message with a platform detail appended, composed HERE rather than in a
+    /// shell so neither renderer assembles user-facing text of its own (which is what
+    /// RendererLocalizationExhaustionTests forbids, and what let the Avalonia thesaurus pane's
+    /// failure text drift out of the localization catalogs) and so both shells word it identically.
+    /// </summary>
+    public static string DescribeClipboardFailure(string? detail) =>
+        string.IsNullOrWhiteSpace(detail)
+            ? ClipboardFailureMessage
+            : ClipboardFailureMessage + " " + detail.Trim();
+
+    // clip-1 (R143): FreeX (and any other HTML-aware source: browsers, LibreOffice Calc, Word) never
+    // places "Rich Text Format" on the clipboard for a cell-range copy -- it places plain text plus an
+    // HTML table fragment (CF_HTML), under "text/html" cross-platform and/or the Windows "HTML Format"
+    // name (mirroring FreeX.App.Avalonia's own MainWindow.ClipboardHtml.cs HtmlClipboardFormat /
+    // HtmlWindowsClipboardFormat pair). Reading only RTF meant a FreeX->Writer rich paste always
+    // silently degraded to unformatted text. Request both HTML format names alongside RTF so
+    // ReadAsync below can fall back to the HTML payload -- parsed with the SAME HtmlFileAdapter this
+    // project already uses for whole-file ".html" import -- whenever no RTF is present. This is the
+    // cheaper, correct-for-both-directions fix: teaching Writer to read HTML reuses the existing
+    // AngleSharp-based HtmlFileAdapter table/paragraph reader, whereas making FreeX emit RTF would mean
+    // building and maintaining an entire RTF table serializer (font/color/border table + \trowd/\cellx
+    // layout) in FreeX purely to satisfy Writer, when FreeX's CF_HTML export already carries the same
+    // formatting (bold/fill/alignment/borders/merges) that a from-Word RTF paste would.
+    private static readonly PlatformClipboardFormat RichTextClipboardFormat = new(
+        RichTextFormat,
+        PlatformClipboardDataKind.Text);
+
+    // clip-RTF: "Rich Text Format" is the WINDOWS clipboard name. On Linux and macOS the format string is
+    // a MIME type, so a copy written only under the Windows name is invisible to every other application
+    // there -- which is exactly the case the RTF flavour exists to serve. Written and read under both, the
+    // way the HTML pair above already handles the same split.
+    private const string RtfMimeFormat = "text/rtf";
+
+    private static readonly PlatformClipboardFormat RtfMimeClipboardFormat = new(
+        RtfMimeFormat,
+        PlatformClipboardDataKind.Text);
+
+    private const string HtmlFormat = "text/html";
+    private const string HtmlWindowsFormat = "HTML Format";
+
+    private static readonly PlatformClipboardFormat HtmlClipboardFormat = new(
+        HtmlFormat,
+        PlatformClipboardDataKind.Text);
+
+    private static readonly PlatformClipboardFormat HtmlWindowsClipboardFormat = new(
+        HtmlWindowsFormat,
+        PlatformClipboardDataKind.Text);
+
+    /// <summary>
+    /// Writer's own clipboard flavour: the copied selection as a .docx package. RTF and HTML are lingua
+    /// francas — they carry what other applications understand, which is formatting and structure, and
+    /// silently drop everything Writer knows that they cannot express: a content control (there is no
+    /// w:sdt in HTML), a tracked change's author and date, a comment anchor, a bookmark. Copying a form
+    /// field and pasting it back into the same document therefore produced ordinary text. Writing the
+    /// selection in the format the document itself is saved in means a Writer-to-Writer paste keeps
+    /// whatever the model holds, while the RTF/HTML flavours stay on the clipboard untouched for
+    /// everyone else.
+    /// </summary>
+    public const string NativeDocumentFormat = "Writer.Document";
+
+    private static readonly PlatformClipboardFormat NativeDocumentClipboardFormat = new(
+        NativeDocumentFormat,
+        PlatformClipboardDataKind.Bytes,
+        PlatformClipboardFormatScope.Application);
+
+    // writer-paste-formats F1: a clipboard that carries ONLY a bitmap -- a screenshot, Paint/Photos'
+    // Ctrl+C, a PDF viewer or browser's "Copy image" -- has none of the text-shaped formats above, so
+    // without IncludeImage the read below comes back with Text empty and RichDocument null and the
+    // paste is reported as "Clipboard does not contain text", even though the platform clipboard layer
+    // (WpfPlatformClipboard/AvaloniaPlatformClipboard) fully supports reading it. Word inserts such a
+    // paste as an inline picture; ReadAsync's includeRichDocument branch now does the same by wrapping
+    // the bitmap in a single-paragraph TextDocument (see TryBuildImageDocument) and handing it back as
+    // RichDocument, so it flows through the SAME already-working rich-paste-at-caret path that an
+    // HTML clipboard payload's own <img> tags already use (HtmlFileAdapter parses those into an
+    // InlineImage run today) -- no change needed anywhere the plan is consumed.
+    public static PlatformClipboardReadRequest PasteSpecialReadRequest { get; } = new(
+        IncludeText: true,
+        IncludeImage: true,
+        CustomFormats:
+        [
+            NativeDocumentClipboardFormat,
+            RichTextClipboardFormat,
+            RtfMimeClipboardFormat,
+            HtmlClipboardFormat,
+            HtmlWindowsClipboardFormat
+        ]);
+
+    public static PlatformClipboardContent? CreateWriteContent(string? selectedText) =>
+        CreateWriteContent(selectedText, richDocument: null);
+
+    // shell-clipboard F2: a native rich-text control (WPF's RichTextBox, which the WPF shell's
+    // Copy/Cut fall through to natively -- see DocumentView.cs's "writer-cc-5" comment) places RTF
+    // and an HTML/Xaml payload on the clipboard alongside plain text automatically. The Avalonia
+    // shell's editor has no such native control, so its Copy/Cut must build that rich payload
+    // itself or every Copy+Paste round trip -- even within the same document -- silently drops all
+    // character formatting. <paramref name="richDocument"/> is a (typically small, selection-only)
+    // document a caller builds via <see cref="BuildSelectionRichDocument"/>; serializing it to HTML
+    // reuses the same <see cref="HtmlFileAdapter"/> this class already reads HTML clipboard payloads
+    // with (see clip-1 above), so the format this method WRITES is exactly the format ReadAsync
+    // below already knows how to read back -- including from Writer itself.
+    /// <summary>
+    /// Builds clipboard content from a selection already serialized to <paramref name="rtf"/>: parses
+    /// it into a document for the structured payload AND attaches the original RTF string, so a
+    /// receiving application gets both.
+    /// </summary>
+    /// <remarks>
+    /// Exists so the renderers never touch RtfClipboardDocumentParser themselves.
+    /// RichClipboardDocumentPlannerTests forbids RTF parsing in DocumentView/MainWindow precisely so
+    /// this policy lives in one place -- the WPF host was doing its own parse-and-attach on the COPY
+    /// side, which is the same rule the paste side already routes through here.
+    /// </remarks>
+    public static PlatformClipboardContent? CreateWriteContentFromRtf(string? selectedText, string? rtf) =>
+        CreateWriteContentFromRtf(selectedText, rtf, nativeDocument: null);
+
+    /// <summary>
+    /// As <see cref="CreateWriteContentFromRtf(string?, string?)"/>, plus Writer's own flavour — see
+    /// <see cref="CreateWriteContent(string?, TextDocument?, TextDocument?)"/>. The RTF a native editor
+    /// produced is still attached verbatim for every other application.
+    /// </summary>
+    public static PlatformClipboardContent? CreateWriteContentFromRtf(
+        string? selectedText,
+        string? rtf,
+        TextDocument? nativeDocument)
+    {
+        TextDocument? richDocument = null;
+        if (rtf is not null)
+            RtfClipboardDocumentParser.TryParse(rtf, out richDocument);
+
+        if (CreateWriteContent(selectedText, richDocument, nativeDocument) is not { } content)
+            return null;
+
+        if (rtf is null)
+            return content;
+
+        // The native editor's own RTF is richer than a re-render of the parsed model, so it wins over
+        // the one CreateWriteContent just derived — hence replace rather than add, or the clipboard
+        // would carry the same flavour twice.
+        var customData = content.CustomData
+            .Where(data => data.Format.Name is not (RichTextFormat or RtfMimeFormat))
+            .ToList();
+        customData.Add(PlatformClipboardData.FromText(RichTextFormat, rtf));
+        customData.Add(PlatformClipboardData.FromText(RtfMimeFormat, rtf));
+        return new PlatformClipboardContent(content.Text, content.FilePaths, content.Image, customData);
+    }
+
+    public static PlatformClipboardContent? CreateWriteContent(string? selectedText, TextDocument? richDocument) =>
+        CreateWriteContent(selectedText, richDocument, nativeDocument: null);
+
+    /// <summary>
+    /// As <see cref="CreateWriteContent(string?, TextDocument?)"/>, plus Writer's own flavour:
+    /// <paramref name="nativeDocument"/> (a faithful copy of the selection, see
+    /// <see cref="BuildSelectionNativeDocument"/>) is written as a .docx package under
+    /// <see cref="NativeDocumentFormat"/>, so a paste back into Writer keeps what RTF and HTML cannot
+    /// express. The lingua-franca flavours are still written from <paramref name="richDocument"/>, so
+    /// nothing changes for any other application reading the clipboard.
+    /// </summary>
+    public static PlatformClipboardContent? CreateWriteContent(
+        string? selectedText,
+        TextDocument? richDocument,
+        TextDocument? nativeDocument)
+    {
+        if (string.IsNullOrEmpty(selectedText))
+            return null;
+
+        List<PlatformClipboardData>? customData = null;
+        if (richDocument is not null && TryRenderHtml(richDocument) is { } html)
+        {
+            customData =
+            [
+                PlatformClipboardData.FromText(HtmlFormat, html),
+                PlatformClipboardData.FromText(HtmlWindowsFormat, html),
+            ];
+        }
+
+        // clip-RTF: HTML alone left the Avalonia shell's copy unreadable to applications that only take
+        // RTF (the WPF shell got RTF free from its native editor). Written from the same selection
+        // document, so the two lingua-franca flavours agree; CreateWriteContentFromRtf replaces this
+        // with the native editor's own RTF where there is one.
+        if (richDocument is not null && TryRenderRtf(richDocument) is { } rtf)
+        {
+            customData ??= [];
+            customData.Add(PlatformClipboardData.FromText(RichTextFormat, rtf));
+            customData.Add(PlatformClipboardData.FromText(RtfMimeFormat, rtf));
+        }
+
+        if (nativeDocument is not null && TryRenderNativeDocument(nativeDocument) is { } package)
+        {
+            customData ??= [];
+            customData.Add(PlatformClipboardData.FromBytes(
+                NativeDocumentFormat,
+                package,
+                PlatformClipboardFormatScope.Application));
+        }
+
+        return new PlatformClipboardContent(Text: selectedText, CustomData: customData);
+    }
+
+    /// <summary>
+    /// Serializes a selection document as a .docx package — the same writer a save uses, so whatever the
+    /// model carries survives. A failure degrades to the other flavours rather than failing the copy,
+    /// mirroring <see cref="TryRenderHtml"/>.
+    /// </summary>
+    private static byte[]? TryRenderNativeDocument(TextDocument document)
+    {
+        try
+        {
+            using var stream = new MemoryStream();
+            DocxWriter.Write(document, stream);
+            return stream.ToArray();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static TextDocument? TryReadNativeDocument(byte[]? package)
+    {
+        if (package is null || package.Length == 0)
+            return null;
+
+        try
+        {
+            using var stream = new MemoryStream(package, writable: false);
+            return DocxReader.Read(stream);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Builds a small standalone <see cref="TextDocument"/> covering only <paramref name="ranges"/>
+    /// (as resolved by a renderer, e.g. <c>DocumentView.GetSelectionRichSnapshot</c>), with each
+    /// run's character formatting fully resolved through <paramref name="source"/>'s default-run and
+    /// paragraph/character style cascade (<see cref="DocumentRunFormattingResolver"/>) into direct
+    /// formatting on the copied run. Flattening the cascade this way means the returned document
+    /// renders correctly through <see cref="HtmlFileAdapter"/> standalone, without needing to carry
+    /// a copy of <paramref name="source"/>'s style dictionary. Returns null when the ranges contain
+    /// no actual run content (e.g. an empty or collapsed selection).
+    /// </summary>
+    public static TextDocument? BuildSelectionRichDocument(
+        TextDocument source,
+        IReadOnlyList<DocumentFormattingTextRange>? ranges)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (ranges is null || ranges.Count == 0)
+            return null;
+
+        var document = new TextDocument();
+        var wroteAnyRun = false;
+        foreach (var range in ranges)
+        {
+            var paragraph = range.Paragraph;
+            var textLength = paragraph.PlainText.Length;
+            var start = Math.Clamp(Math.Min(range.StartOffset, range.EndOffset), 0, textLength);
+            var end = Math.Clamp(Math.Max(range.StartOffset, range.EndOffset), 0, textLength);
+
+            var sliced = new Paragraph { Formatting = paragraph.Formatting };
+            var position = 0;
+            foreach (var run in paragraph.Runs)
+            {
+                var runStart = position;
+                var runText = run.Text;
+                position = runStart + runText.Length;
+
+                var overlapStart = Math.Max(start, runStart);
+                var overlapEnd = Math.Min(end, position);
+                if (overlapEnd <= overlapStart)
+                    continue;
+
+                var sliceText = runText.Substring(overlapStart - runStart, overlapEnd - overlapStart);
+                if (sliceText.Length == 0)
+                    continue;
+
+                var resolved = DocumentRunFormattingResolver.Resolve(source, paragraph, run);
+                sliced.Runs.Add(new Run(sliceText, resolved));
+                wroteAnyRun = true;
+            }
+
+            if (sliced.Runs.Count > 0)
+                document.Blocks.Add(sliced);
+        }
+
+        return wroteAnyRun ? document : null;
+    }
+
+    /// <summary>
+    /// Builds the Writer-flavour copy of <paramref name="ranges"/>: the selected runs CLONED rather than
+    /// flattened, so every run mark travels — the content control a run belongs to, its tracked-change
+    /// author and date, its comment id, its hyperlink, its linked character style. The paragraph's own
+    /// formatting, style id and body-level region come too, and the source's style dictionary rides
+    /// along so a paste into a document that has never seen those styles still resolves them (the
+    /// insertion path merges what is missing). This is what
+    /// <see cref="BuildSelectionRichDocument"/> deliberately does NOT do: that one resolves the cascade
+    /// into direct formatting because HTML has no styles, and drops the marks HTML cannot carry.
+    /// </summary>
+    public static TextDocument? BuildSelectionNativeDocument(
+        TextDocument source,
+        IReadOnlyList<DocumentFormattingTextRange>? ranges)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (ranges is null || ranges.Count == 0)
+            return null;
+
+        var document = new TextDocument();
+        document.Blocks.Clear();
+        var wroteAnyRun = false;
+        foreach (var range in ranges)
+        {
+            var paragraph = range.Paragraph;
+            var textLength = paragraph.PlainText.Length;
+            var start = Math.Clamp(Math.Min(range.StartOffset, range.EndOffset), 0, textLength);
+            var end = Math.Clamp(Math.Max(range.StartOffset, range.EndOffset), 0, textLength);
+
+            var sliced = new Paragraph
+            {
+                Formatting = paragraph.Formatting,
+                StyleId = paragraph.StyleId,
+                BlockContentControl = paragraph.BlockContentControl,
+            };
+
+            var position = 0;
+            foreach (var run in paragraph.Runs)
+            {
+                var runStart = position;
+                position = runStart + run.Text.Length;
+
+                var overlapStart = Math.Max(start, runStart);
+                var overlapEnd = Math.Min(end, position);
+                if (overlapEnd <= overlapStart)
+                    continue;
+
+                sliced.Runs.Add(RevisionEditPlanner.CloneRunWithText(
+                    run,
+                    run.Text.Substring(overlapStart - runStart, overlapEnd - overlapStart)));
+                wroteAnyRun = true;
+            }
+
+            if (sliced.Runs.Count > 0)
+            {
+                // Bookmarks travel with the slice the same way DocumentModelCloner.CloneParagraphTextRange
+                // carries them for every other partial-paragraph clone path: whole-paragraph bookmark names
+                // (Paragraph.BookmarkNames) copy unconditionally -- they don't depend on run position -- and
+                // run-anchored boundaries (Paragraph.BookmarkBoundaries, used by imported Word bookmarks and
+                // by InsertCrossReferenceCommand's auto-bookmarks) get their RunIndex remapped into the
+                // sliced run list, clamped to the selected range the same way that sibling clone does.
+                // Without this, a copy/cut of a bookmarked paragraph silently drops the bookmark, leaving any
+                // hyperlink or cross-reference field copied alongside it pointing at nothing once pasted.
+                sliced.BookmarkNames.AddRange(paragraph.BookmarkNames);
+                foreach (var boundary in paragraph.BookmarkBoundaries)
+                {
+                    // r165 remediation: clamping EVERY boundary into the selected range manufactured a
+                    // bookmark the user never selected. A paragraph reading "see [bookmarked phrase] and
+                    // this caveat", copied from "and this caveat" alone, produced a zero-width boundary
+                    // pair clamped to offset 0 -- so the pasted text carried an invisible bookmark that
+                    // was nowhere near it. That is the mirror image of the bug this block fixes, and it
+                    // did not exist before, because Copy/Cut never touched boundaries at all.
+                    //
+                    // A pair that lies wholly outside the selection is dropped. A pair only partly
+                    // covered still clamps, which is what carries a half-selected bookmark and is
+                    // asserted by the partial-overlap case below.
+                    if (!BookmarkPairIntersects(paragraph, boundary, start, end))
+                        continue;
+
+                    var sourceOffset = ParagraphRunOffset(paragraph, boundary.RunIndex);
+                    var slicedOffset = Math.Clamp(sourceOffset - start, 0, end - start);
+                    sliced.BookmarkBoundaries.Add(boundary with { RunIndex = SlicedRunIndexAtOffset(sliced, slicedOffset) });
+                }
+
+                document.Blocks.Add(sliced);
+            }
+        }
+
+        if (!wroteAnyRun)
+            return null;
+
+        foreach (var (styleId, style) in source.Styles)
+            document.Styles[styleId] = style;
+        document.DefaultRun = source.DefaultRun;
+        document.Theme = source.Theme;
+        CopyReferencedNotesAndComments(source, document);
+        return document;
+    }
+
+
+    /// <summary>
+    /// True when the bookmark <paramref name="boundary"/> belongs to a span that actually overlaps the
+    /// selected character range [<paramref name="start"/>, <paramref name="end"/>).
+    /// <para>
+    /// Both halves of a pair are located by PairKey, because a boundary on its own says nothing about
+    /// the span's extent: a Start at offset 0 with its End at offset 3 does not reach a selection that
+    /// begins at 6.
+    /// </para>
+    /// <para>
+    /// r166: a partner in ANOTHER paragraph used to count as overlapping unconditionally, on the
+    /// reasoning that the span continues past this paragraph. That is half right and was wrong where it
+    /// mattered -- the span continues in one direction only, and this boundary still has a position. A
+    /// bookmark starting at the end of a paragraph does not cover a selection taken from its beginning,
+    /// so copying that selection carried a dangling Start into text the bookmark never touched. A
+    /// half-pair is therefore treated as the open-ended span it is: a Start covers everything at or
+    /// after it, an End everything before it.
+    /// </para>
+    /// </summary>
+    private static bool BookmarkPairIntersects(Paragraph paragraph, BookmarkBoundary boundary, int start, int end)
+    {
+        var own = ParagraphRunOffset(paragraph, boundary.RunIndex);
+        var partner = paragraph.BookmarkBoundaries
+            .FirstOrDefault(other => other.PairKey == boundary.PairKey && !ReferenceEquals(other, boundary));
+
+        if (partner is null)
+        {
+            return boundary.Kind == BookmarkBoundaryKind.Start
+                ? own < end
+                : own > start;
+        }
+
+        var other = ParagraphRunOffset(paragraph, partner.RunIndex);
+        var spanStart = Math.Min(own, other);
+        var spanEnd = Math.Max(own, other);
+
+        // A zero-width bookmark (start and end at the same offset) still counts when it sits inside the
+        // selection; a non-empty span needs real overlap.
+        return spanStart == spanEnd
+            ? spanStart >= start && spanStart <= end
+            : spanStart < end && spanEnd > start;
+    }
+
+    /// <summary>
+    /// The plain-text offset immediately before <paramref name="runIndex"/> in <paramref name="paragraph"/>
+    /// -- the same position <see cref="BookmarkBoundary.RunIndex"/> names, but expressed as an offset so it
+    /// can be carried through a text-range slice (see <see cref="BuildSelectionNativeDocument"/>) the way
+    /// <c>BookmarkBoundaryMapper.Capture</c> does for the paragraph-internal clone paths in Writer.Core.Model.
+    /// </summary>
+    private static int ParagraphRunOffset(Paragraph paragraph, int runIndex)
+    {
+        var clampedIndex = Math.Clamp(runIndex, 0, paragraph.Runs.Count);
+        var offset = 0;
+        for (var i = 0; i < clampedIndex; i++)
+            offset += paragraph.Runs[i].Text.Length;
+        return offset;
+    }
+
+    /// <summary>
+    /// The run index in <paramref name="paragraph"/> whose text starts at <paramref name="offset"/>. Every
+    /// offset <see cref="BuildSelectionNativeDocument"/> passes here lands exactly on a run boundary of the
+    /// slice it just built (it is either the clamped start/end of the selection, both of which are slice
+    /// boundaries by construction, or an in-range source boundary, which the slicing loop above preserves
+    /// as a run boundary because it never splits a run mid-selection) -- so this never needs to split a run
+    /// the way <c>BookmarkBoundaryMapper.EnsureRunBoundary</c> does for its more general callers.
+    /// </summary>
+    private static int SlicedRunIndexAtOffset(Paragraph paragraph, int offset)
+    {
+        var position = 0;
+        for (var i = 0; i < paragraph.Runs.Count; i++)
+        {
+            if (position == offset)
+                return i;
+            position += paragraph.Runs[i].Text.Length;
+        }
+
+        return paragraph.Runs.Count;
+    }
+
+    /// <summary>
+    /// Carries the footnotes, endnotes and comment threads the copied runs point AT. A run keeps only an
+    /// id, and an id means nothing on its own: pasted into a document with its own footnote 1, a copied
+    /// reference to footnote 1 would silently aim at that unrelated note. Bringing the referenced ones
+    /// along lets <see cref="Writer.Core.Model.DocumentMerge"/> clone and RENUMBER them on insertion, which
+    /// is what it already does for a whole-document insert.
+    /// </summary>
+    private static void CopyReferencedNotesAndComments(TextDocument source, TextDocument selection)
+    {
+        var runs = selection.Paragraphs.SelectMany(paragraph => paragraph.Runs).ToList();
+
+        foreach (var id in runs.Select(run => run.FootnoteId).OfType<int>().Distinct())
+        {
+            if (source.Footnotes.TryGetValue(id, out var footnote))
+                selection.Footnotes[id] = footnote;
+        }
+
+        foreach (var id in runs.Select(run => run.EndnoteId).OfType<int>().Distinct())
+        {
+            if (source.Endnotes.TryGetValue(id, out var endnote))
+                selection.Endnotes[id] = endnote;
+        }
+
+        var commentIds = runs.Select(run => run.CommentId).OfType<int>().Distinct().ToArray();
+        if (commentIds.Length == 0)
+            return;
+
+        // A comment id may name a reply, so the thread ROOT is what has to travel.
+        var topLevelByCommentId = CommentThreadIndex.BuildTopLevelByCommentId(source);
+        foreach (var commentId in commentIds)
+        {
+            if (topLevelByCommentId.TryGetValue(commentId, out var root))
+                selection.Comments[root.Id] = root;
+        }
+    }
+
+    private static string? TryRenderHtml(TextDocument richDocument)
+    {
+        try
+        {
+            using var stream = new MemoryStream();
+            new HtmlFileAdapter().Save(richDocument, stream);
+            return Encoding.UTF8.GetString(stream.ToArray());
+        }
+        catch
+        {
+            // A clipboard write must never crash the editor over an HTML-serialization edge case --
+            // the plain-text payload written alongside this one is always a safe fallback.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Renders the selection document as RTF for applications that read no HTML. Degrades to the other
+    /// flavours on failure, exactly as <see cref="TryRenderHtml"/> does.
+    /// </summary>
+    private static string? TryRenderRtf(TextDocument richDocument)
+    {
+        try
+        {
+            using var stream = new MemoryStream();
+            RtfWriter.Write(richDocument, stream);
+            return Encoding.UTF8.GetString(stream.ToArray());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static async ValueTask<WriterClipboardTransferResult> WriteSelectionAsync(
+        IPlatformClipboard clipboard,
+        string? selectedText,
+        TextDocument? richDocument = null,
+        TextDocument? nativeDocument = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(clipboard);
+        if (CreateWriteContent(selectedText, richDocument, nativeDocument) is not { } content)
+            return Empty();
+
+        var result = await clipboard.WriteAsync(content, cancellationToken);
+        return result.Status switch
+        {
+            PlatformClipboardWriteStatus.Success => Succeeded(),
+            PlatformClipboardWriteStatus.Unavailable =>
+                new(WriterClipboardTransferStatus.Unavailable),
+            PlatformClipboardWriteStatus.Unsupported =>
+                Failed(WriterClipboardTransferStatus.Unsupported, result.ErrorMessage, ClipboardUnsupportedMessage),
+            _ => Failed(WriterClipboardTransferStatus.Failed, result.ErrorMessage, ClipboardFailureMessage),
+        };
+    }
+
+    public static ValueTask<WriterClipboardTransferResult> ReadTextAsync(
+        IPlatformClipboard clipboard,
+        CancellationToken cancellationToken = default) =>
+        ReadAsync(clipboard, PlatformClipboardReadRequest.Text, includeRichDocument: false, cancellationToken);
+
+    public static ValueTask<WriterClipboardTransferResult> ReadPasteSpecialAsync(
+        IPlatformClipboard clipboard,
+        CancellationToken cancellationToken = default) =>
+        ReadAsync(clipboard, PasteSpecialReadRequest, includeRichDocument: true, cancellationToken);
+
+    public static WriterClipboardPastePlan PlanPaste(
+        WriterClipboardPayload payload,
+        PasteSpecialOption option)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        return option switch
+        {
+            PasteSpecialOption.KeepTextOnly =>
+                new(DocumentPasteTextKind.TextOnly, payload.Text, RichDocument: null),
+            PasteSpecialOption.KeepSourceFormatting when payload.RichDocument is not null =>
+                new(
+                    DocumentPasteTextKind.MergeFormatting,
+                    payload.Text,
+                    payload.RichDocument,
+                    payload.RichDocumentIsSynthesizedImage),
+            _ => new(DocumentPasteTextKind.MergeFormatting, payload.Text, RichDocument: null),
+        };
+    }
+
+    private static async ValueTask<WriterClipboardTransferResult> ReadAsync(
+        IPlatformClipboard clipboard,
+        PlatformClipboardReadRequest request,
+        bool includeRichDocument,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(clipboard);
+        var result = await clipboard.ReadAsync(request, cancellationToken);
+        if (result.Status != PlatformClipboardReadStatus.Success || result.Value is null)
+        {
+            return result.Status switch
+            {
+                PlatformClipboardReadStatus.Unavailable =>
+                    Failed(WriterClipboardTransferStatus.Unavailable, result.ErrorMessage, ClipboardUnavailableMessage),
+                PlatformClipboardReadStatus.Unsupported =>
+                    Failed(WriterClipboardTransferStatus.Unsupported, result.ErrorMessage, ClipboardUnsupportedMessage),
+                PlatformClipboardReadStatus.Failed =>
+                    Failed(WriterClipboardTransferStatus.Failed, result.ErrorMessage, ClipboardFailureMessage),
+                _ => Empty(),
+            };
+        }
+
+        TextDocument? richDocument = null;
+        var richDocumentIsSynthesizedImage = false;
+        if (includeRichDocument)
+        {
+            // Writer's own flavour first: it is the only one that carries content controls, tracked-change
+            // identity, comment anchors and style links, so a Writer-to-Writer paste never has to settle
+            // for what RTF or HTML could express.
+            richDocument = TryReadNativeDocument(
+                result.Value.GetBytes(NativeDocumentFormat, PlatformClipboardFormatScope.Application));
+
+            var rtf = richDocument is null
+                ? result.Value.GetText(RichTextFormat) ?? result.Value.GetText(RtfMimeFormat)
+                : null;
+            if (rtf is not null && RtfClipboardDocumentParser.TryParse(rtf, out var parsed))
+                richDocument = parsed;
+
+            // clip-1 (R143): no RTF on the clipboard (FreeX and other HTML-only sources never write
+            // it) -- fall back to whichever HTML format is present.
+            if (richDocument is null)
+            {
+                var html = result.Value.GetText(HtmlFormat) ?? result.Value.GetText(HtmlWindowsFormat);
+                if (TryParseHtmlDocument(html, out var parsedHtml))
+                    richDocument = parsedHtml;
+            }
+
+            // writer-paste-formats F1: nothing text-shaped was on the clipboard at all -- if there is a
+            // bitmap, wrap it as an inline picture rather than reporting "no text".
+            if (richDocument is null && result.Value.Image is { } clipboardImage)
+            {
+                richDocument = TryBuildImageDocument(clipboardImage);
+                richDocumentIsSynthesizedImage = richDocument is not null;
+            }
+        }
+
+        var payload = new WriterClipboardPayload(result.Value.Text, richDocument, richDocumentIsSynthesizedImage);
+        return payload.HasContent ? Succeeded(payload) : Empty();
+    }
+
+    /// <summary>
+    /// Parses an HTML clipboard payload into a <see cref="TextDocument"/> via the same
+    /// <see cref="HtmlFileAdapter"/> this project already uses for ".html" file import (AngleSharp
+    /// under the hood, table/paragraph/style aware). <paramref name="html"/> may be a bare fragment
+    /// (as FreeX's Avalonia shell writes under "text/html") or a full CF_HTML payload -- a plain-text
+    /// header (<c>Version:0.9\r\nStartHTML:...</c>) followed by an <c>&lt;html&gt;...&lt;/html&gt;</c>
+    /// wrapper around <c>&lt;!--StartFragment--&gt;...&lt;!--EndFragment--&gt;</c> (as the WPF host's
+    /// "HTML Format" and FreeX's own <c>ClipboardHtmlSerializer.WrapAsCfHtml</c> write). The header is
+    /// not valid HTML, so it is stripped down to the first <c>&lt;html</c> tag before parsing --
+    /// otherwise AngleSharp's lenient parser would fold the raw header text into the document as a
+    /// spurious leading paragraph. The StartFragment/EndFragment markers themselves are ordinary HTML
+    /// comments and need no special handling; the parser simply skips them.
+    /// </summary>
+    private static bool TryParseHtmlDocument(string? html, out TextDocument? document)
+    {
+        document = null;
+        if (string.IsNullOrWhiteSpace(html))
+            return false;
+
+        var htmlStart = html.IndexOf("<html", StringComparison.OrdinalIgnoreCase);
+        var markup = htmlStart > 0 ? html[htmlStart..] : html;
+
+        TextDocument parsed;
+        try
+        {
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(markup));
+            parsed = new HtmlFileAdapter().Load(stream);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (parsed.Blocks.Count == 0)
+            return false;
+
+        document = parsed;
+        return true;
+    }
+
+    /// <summary>
+    /// Wraps a clipboard bitmap (see writer-paste-formats F1) as a single-paragraph <see cref="TextDocument"/>
+    /// carrying one <see cref="Run.FromImage"/> run, sized through the same
+    /// <see cref="PictureInsertionPlanner.CreatePngImage"/> the Insert Picture/Insert Icon commands already
+    /// use, so a pasted bitmap is capped to the same default maximum width as an inserted one. The platform
+    /// clipboard usually reports pixel dimensions alongside the PNG bytes, but the Avalonia reader can hand
+    /// back a decoded bitmap of null size when only the re-encoded bytes survived the round trip -- in that
+    /// case the dimensions are read straight out of the PNG's own IHDR chunk instead of guessing.
+    /// </summary>
+    private static TextDocument? TryBuildImageDocument(PlatformClipboardImage image)
+    {
+        if (image.PngBytes.Length == 0)
+            return null;
+
+        var pixelWidth = image.PixelWidth;
+        var pixelHeight = image.PixelHeight;
+        if (pixelWidth is not > 0 || pixelHeight is not > 0)
+        {
+            if (!TryDecodePngSize(image.PngBytes, out var decodedWidth, out var decodedHeight))
+                return null;
+            pixelWidth = decodedWidth;
+            pixelHeight = decodedHeight;
+        }
+
+        try
+        {
+            var inlineImage = PictureInsertionPlanner.CreatePngImage(image.PngBytes, pixelWidth.Value, pixelHeight.Value);
+            var paragraph = new Paragraph();
+            paragraph.Runs.Add(Run.FromImage(inlineImage));
+
+            var document = new TextDocument();
+            document.Blocks.Add(paragraph);
+            return document;
+        }
+        catch
+        {
+            // Mirrors TryRenderHtml/TryRenderRtf: never let a malformed clipboard bitmap crash the paste.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the pixel width/height straight out of a PNG's mandatory first chunk (length(4) "IHDR"(4)
+    /// width(4, big-endian) height(4, big-endian) ...), immediately after the 8-byte PNG signature.
+    /// </summary>
+    private static bool TryDecodePngSize(byte[] pngBytes, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (pngBytes.Length < 24)
+            return false;
+
+        if (pngBytes[12] != (byte)'I' || pngBytes[13] != (byte)'H'
+            || pngBytes[14] != (byte)'D' || pngBytes[15] != (byte)'R')
+        {
+            return false;
+        }
+
+        width = (int)BinaryPrimitives.ReadUInt32BigEndian(pngBytes.AsSpan(16, 4));
+        height = (int)BinaryPrimitives.ReadUInt32BigEndian(pngBytes.AsSpan(20, 4));
+        return width > 0 && height > 0;
+    }
+
+    private static WriterClipboardTransferResult Succeeded(WriterClipboardPayload? payload = null) =>
+        new(WriterClipboardTransferStatus.Succeeded, payload);
+
+    private static WriterClipboardTransferResult Empty() =>
+        new(WriterClipboardTransferStatus.Empty, FeedbackMessage: EmptyClipboardMessage);
+
+    private static WriterClipboardTransferResult Failed(
+        WriterClipboardTransferStatus status,
+        string? detail,
+        string fallback) =>
+        new(
+            status,
+            FeedbackMessage: string.IsNullOrWhiteSpace(detail)
+                ? fallback
+                : $"{fallback} {detail}");
+}

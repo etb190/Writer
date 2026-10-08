@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Portable shell tier: IShellStrings/ShellStrings the WPF helpers consume,
+         plus the neutral planners these realizers sit alongside. -->
+    <ProjectReference Include="../Writer.Shared.Shell/Writer.Shared.Shell.csproj" />
+    <ProjectReference Include="../Writer.Shared.AppServices/Writer.Shared.AppServices.csproj" />
+    <ProjectReference Include="../Writer.Shared.IO/Writer.Shared.IO.csproj" />
+    <ProjectReference Include="../Writer.Shared.Localization/Writer.Shared.Localization.csproj" />
+    <!-- For RibbonCommandFaultReporter: the startup runner routes contained ribbon-command faults
+         into the app's diagnostics. Writer.Shared.Ribbon is platform-neutral with no references of
+         its own, so this adds no cycle. -->
+    <ProjectReference Include="../Writer.Shared.Ribbon/Writer.Shared.Ribbon.csproj" />
+    <ProjectReference Include="../Writer.Shared.Theme/Writer.Shared.Theme.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Host tests exercise internal dialog sizing and startup diagnostics contracts. -->
+    <InternalsVisibleTo Include="Writer.Shared.Shell.Wpf.Tests" />
+    <InternalsVisibleTo Include="FreeX.App.Host.Tests" />
+    <InternalsVisibleTo Include="Writer.App.Host.Tests" />
+    <InternalsVisibleTo Include="FreeP.App.Host.Tests" />
+  </ItemGroup>
+
+</Project>

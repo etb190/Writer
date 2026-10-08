@@ -1,0 +1,167 @@
+using System.Globalization;
+using Writer.Core.Model;
+
+namespace Writer.App.Presentation.Ribbon;
+
+public enum WriterParagraphValueKind
+{
+    IndentLeft,
+    IndentRight,
+    SpaceBefore,
+    SpaceAfter,
+}
+
+public sealed record WriterRibbonFormattingPorts(
+    Func<ParagraphFormatting> GetCurrentParagraph,
+    Action<double> ApplyIndentLeft,
+    Action<double> ApplyIndentRight,
+    Action<double> ApplySpaceBefore,
+    Action<double> ApplySpaceAfter,
+    Func<TextDocument> GetDocument,
+    Func<string?> GetCurrentParagraphStyleId,
+    Action<string> ApplyParagraphStyle,
+    Action<DocumentTheme> ApplyTheme,
+    Action<DocumentStyleSet> ApplyStyleSet);
+
+/// <summary>
+/// Owns renderer-neutral parsing, catalog resolution, and state projection for Writer's
+/// value-backed paragraph and document-formatting ribbon commands.
+/// </summary>
+public sealed class WriterRibbonFormattingSession
+{
+    private readonly WriterRibbonFormattingPorts _ports;
+
+    public WriterRibbonFormattingSession(WriterRibbonFormattingPorts ports)
+    {
+        ArgumentNullException.ThrowIfNull(ports);
+        _ports = ports;
+    }
+
+    public bool ApplyParagraphValue(WriterParagraphValueKind kind, string? rawValue)
+    {
+        if (!TryParseNonNegativePoints(rawValue, out var points))
+            return false;
+
+        ApplyParagraphValue(kind, points);
+        return true;
+    }
+
+    public string CurrentParagraphValue(WriterParagraphValueKind kind)
+    {
+        var paragraph = _ports.GetCurrentParagraph();
+        var value = kind switch
+        {
+            WriterParagraphValueKind.IndentLeft => paragraph.IndentLeftPt,
+            WriterParagraphValueKind.IndentRight => paragraph.IndentRightPt,
+            WriterParagraphValueKind.SpaceBefore => paragraph.SpaceBeforePt,
+            WriterParagraphValueKind.SpaceAfter => paragraph.SpaceAfterPt,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+        };
+        return FormatPoints(value);
+    }
+
+    public bool ApplyParagraphStyle(string? choice)
+    {
+        var styleId = ResolveParagraphStyleId(_ports.GetDocument(), choice);
+        if (styleId is null)
+            return false;
+
+        _ports.ApplyParagraphStyle(styleId);
+        return true;
+    }
+
+    public string CurrentParagraphStyleName() =>
+        ResolveParagraphStyleName(_ports.GetDocument(), _ports.GetCurrentParagraphStyleId());
+
+    public bool ApplyTheme(string? choice)
+    {
+        if (string.IsNullOrWhiteSpace(choice) || DocumentTheme.FindByName(choice) is not { } theme)
+            return false;
+
+        _ports.ApplyTheme(theme);
+        return true;
+    }
+
+    public string CurrentThemeName() => _ports.GetDocument().Theme.Name;
+
+    public bool ApplyStyleSet(string? choice)
+    {
+        if (string.IsNullOrWhiteSpace(choice) || DocumentStyleSet.FindByName(choice) is not { } styleSet)
+            return false;
+
+        _ports.ApplyStyleSet(styleSet);
+        return true;
+    }
+
+    public string? CurrentStyleSetName() => DocumentStyleSet.FindMatching(_ports.GetDocument())?.Name;
+
+    // r574: IsFinite as well. "points >= 0" is the one-sided accept form r571 corrected --
+    // Infinity satisfies it. Found by the widened r486 tripwire rather than by inspection.
+    //
+    // r604: and it is TYPED input, so it must be read in the user's locale. Parsing it as invariant
+    // only meant a user on any comma-decimal machine who typed "1,5" got nothing at all -- the
+    // command returned false and silently declined. LocalizedNumberEntry keeps the invariant
+    // spelling working as a guarded fallback, so this widens what is accepted without dropping
+    // anything, and IsFinite stays here because r571/r574 are about the VALUE, not its spelling.
+    public static bool TryParseNonNegativePoints(string? rawValue, out double points) =>
+        LocalizedNumberEntry.TryParse(rawValue, NumberStyles.Float, out points)
+        && double.IsFinite(points)
+        && points >= 0;
+
+    public static string FormatPoints(double points) =>
+        WriterRibbonNumericValueParser.FormatInvariant(points);
+
+    public static string? ResolveParagraphStyleId(TextDocument document, string? choice)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (string.IsNullOrWhiteSpace(choice))
+            return null;
+        if (document.Styles.ContainsKey(choice))
+            return choice;
+
+        foreach (var style in document.Styles.Values)
+        {
+            if (string.Equals(style.Name, choice, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Compact(style.Id), Compact(choice), StringComparison.OrdinalIgnoreCase)
+                || string.Equals(Compact(style.Name), Compact(choice), StringComparison.OrdinalIgnoreCase))
+            {
+                return style.Id;
+            }
+        }
+
+        return null;
+    }
+
+    public static string ResolveParagraphStyleName(TextDocument document, string? styleId)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (string.IsNullOrWhiteSpace(styleId))
+            return "Normal";
+        if (BuiltInStyles.Find(styleId) is { } builtIn)
+            return builtIn.Name;
+        return document.Styles.TryGetValue(styleId, out var style) ? style.Name : styleId;
+    }
+
+    private void ApplyParagraphValue(WriterParagraphValueKind kind, double points)
+    {
+        switch (kind)
+        {
+            case WriterParagraphValueKind.IndentLeft:
+                _ports.ApplyIndentLeft(points);
+                break;
+            case WriterParagraphValueKind.IndentRight:
+                _ports.ApplyIndentRight(points);
+                break;
+            case WriterParagraphValueKind.SpaceBefore:
+                _ports.ApplySpaceBefore(points);
+                break;
+            case WriterParagraphValueKind.SpaceAfter:
+                _ports.ApplySpaceAfter(points);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
+        }
+    }
+
+    private static string Compact(string value) => value.Replace(" ", string.Empty, StringComparison.Ordinal);
+}

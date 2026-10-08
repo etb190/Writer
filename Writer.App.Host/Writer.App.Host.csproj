@@ -1,0 +1,156 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup><WriterBrand Condition="'$(WriterBrand)' == ''">Writer</WriterBrand></PropertyGroup>
+  <Import Project="../shared/Writer.Shared.Shell/BrandAssets.props" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <StartupObject>Writer.App.Host.Program</StartupObject>
+  </PropertyGroup>
+
+  <Import Project="../Writer.Ribbon.Definitions/Writer.Ribbon.Assets.props" />
+
+  <PropertyGroup Condition="'$(WriterHostTestSupport)' == 'true'">
+    <OutputPath>bin/TestSupport/$(Configuration)/</OutputPath>
+    <IntermediateOutputPath>obj/TestSupport/$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(WriterDialogHarnessSupport)' == 'true'">
+    <OutputPath>bin/DialogHarness/$(Configuration)/</OutputPath>
+    <IntermediateOutputPath>obj/DialogHarness/$(Configuration)/$(TargetFramework)/</IntermediateOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(WriterHostTestSupport)' == 'true'">
+    <Compile Include="../TestSupport/HostAccess.Wpf/MainWindow.TestAccess.cs"
+             Link="MainWindow.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/DocumentView.TestAccess.cs"
+             Link="Editing/DocumentView.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/AutosaveCoordinator.TestAccess.cs"
+             Link="AutosaveCoordinator.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/Dialogs.TestAccess.cs"
+             Link="Dialogs.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/Backstage.TestAccess.cs"
+             Link="Backstage/Backstage.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/ScreenClipOverlay.TestAccess.cs"
+             Link="Editing/ScreenClipOverlay.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/OutlineView.TestAccess.cs"
+             Link="Editing/OutlineView.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/XpsExport.TestAccess.cs"
+             Link="XpsExport.TestAccess.cs" />
+  </ItemGroup>
+
+  <ItemDefinitionGroup Condition="'$(WriterHostTestSupport)' == 'true'">
+    <ProjectReference>
+      <GlobalPropertiesToRemove>WriterHostTestSupport</GlobalPropertiesToRemove>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(WriterDialogHarnessSupport)' == 'true'">
+    <ProjectReference>
+      <GlobalPropertiesToRemove>WriterDialogHarnessSupport</GlobalPropertiesToRemove>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(WriterRenderCompareSupport)' == 'true'">
+    <ProjectReference>
+      <GlobalPropertiesToRemove>WriterRenderCompareSupport</GlobalPropertiesToRemove>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <Using Include="Writer.App.Localization.LocalizedUiText" Alias="UiText" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WriterHostTestSupport)' == 'true'">
+    <!-- Tests reach the internal print paginator (HeaderFooterPaginator) directly. -->
+    <InternalsVisibleTo Include="Writer.App.Host.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FidelityRender's normal Release build composes internal pagination, overlay, and column-rule
+         primitives into visual-parity artifacts. Its access must not depend on the host-test variant. -->
+    <InternalsVisibleTo Include="Writer.FidelityRender" />
+    <!-- RenderCompare is also built through Writer.slnx, where the host is shared with the other
+         projects rather than built in a render-compare-specific variant. -->
+    <InternalsVisibleTo Include="Writer.RenderCompare" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WriterDialogHarnessSupport)' == 'true'">
+    <Compile Include="../TestSupport/HostAccess.Wpf/Dialogs.TestAccess.cs"
+             Link="Dialogs.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/DialogHarness.TestAccess.cs"
+             Link="DialogHarness.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/Backstage.TestAccess.cs"
+             Link="Backstage/Backstage.TestAccess.cs" />
+    <Compile Include="../TestSupport/HostAccess.Wpf/ScreenClipOverlay.TestAccess.cs"
+             Link="Editing/ScreenClipOverlay.TestAccess.cs" />
+    <InternalsVisibleTo Include="Writer.DialogVisualHarness.Wpf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../shared/Writer.Shared.Drawing/Writer.Shared.Drawing.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Ribbon/Writer.Shared.Ribbon.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Ribbon.Wpf/Writer.Shared.Ribbon.Wpf.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Shell/Writer.Shared.Shell.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Shell.Wpf/Writer.Shared.Shell.Wpf.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Theme/Writer.Shared.Theme.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Theme.Wpf/Writer.Shared.Theme.Wpf.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.AppServices/Writer.Shared.AppServices.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Commands/Writer.Shared.Commands.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Opc/Writer.Shared.Opc.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Pdf/Writer.Shared.Pdf.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Pdf.Wpf/Writer.Shared.Pdf.Wpf.csproj" />
+    <ProjectReference Include="../Writer.App.Localization/Writer.App.Localization.csproj" />
+    <ProjectReference Include="../Writer.App.Presentation/Writer.App.Presentation.csproj" />
+    <ProjectReference Include="../Writer.Ribbon.Definitions/Writer.Ribbon.Definitions.csproj" />
+    <ProjectReference Include="../Writer.Core.Model/Writer.Core.Model.csproj" />
+    <ProjectReference Include="../Writer.Core.IO/Writer.Core.IO.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In-box Windows text-to-speech (System.Speech.Synthesis) for Review > Read Aloud. Local synthesis,
+         no cloud; Microsoft-published package (the modern .NET home of the classic System.Speech API).
+         Version is centrally managed in Directory.Packages.props. -->
+    <PackageReference Include="System.Speech" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+    <Using Include="Writer.Shared.IO" />
+    <Using Include="Writer.Shared.Ribbon" />
+    <Using Include="Writer.Shared.AppServices" />
+    <Using Include="Writer.Shared.Shell" />
+    <Using Include="Writer.App.Presentation.DocumentView" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpVectors.Wpf" />
+    <PackageReference Include="Velopack" />
+    <!-- Real PDF export (PdfExport.cs). Same centrally-managed PDFsharp package FreeX uses for its
+         PDF exporter — reused rather than introducing a new PDF dependency. -->
+    <PackageReference Include="PDFsharp-WPF" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="$(BrandWindowsIconPath)" Link="Resources/$(BrandWindowsIconFileName)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="$(BrandWindowsIconPath)"
+             Link="Resources/$(BrandWindowsIconFileName)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ApplicationIcon>$(BrandWindowsIconPath)</ApplicationIcon>
+  </PropertyGroup>
+
+</Project>

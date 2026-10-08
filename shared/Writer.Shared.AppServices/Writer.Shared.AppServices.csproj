@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- The Sentry DSN is a public ingestion identifier, not a signing secret. Release automation can
+       inject it with /p:FreeFamilySentryDsn=... without a source edit. Environment variables remain
+       runtime overrides. No value is embedded in ordinary developer builds. -->
+  <ItemGroup Condition="'$(FreeFamilySentryDsn)' != ''">
+    <AssemblyMetadata Include="FreeFamilySentryDsn" Value="$(FreeFamilySentryDsn)" />
+    <AssemblyMetadata Include="FreeFamilySentryEnvironment"
+                      Value="$(FreeFamilySentryEnvironment)"
+                      Condition="'$(FreeFamilySentryEnvironment)' != ''" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Writer.Shared.IO/Writer.Shared.IO.csproj" />
+    <ProjectReference Include="../Writer.Shared.Localization/Writer.Shared.Localization.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Velopack powers the app-neutral self-update orchestration in Updates/. Referenced here so
+         any shared-tier consumer (FreeX, FreeP, Writer) gets self-update by supplying config only.
+         Logging.Abstractions supplies the optional ILogger diagnostics sink for that orchestration. -->
+    <PackageReference Include="Velopack" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Sentry" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tests exercise the internal normalization and recovery policy hooks directly. -->
+    <InternalsVisibleTo Include="FreeX.App.Services.Tests" />
+    <InternalsVisibleTo Include="Writer.Shared.AppServices.Tests" />
+    <!-- r139 sweep78-1: the FreeP export-deadlock repro test constructs AtomicExportExecutor via
+         its internal createTemporaryFile/replaceDestination constructor so it can inject a custom
+         ITemporaryResourceFileSystem whose write genuinely completes asynchronously. -->
+    <InternalsVisibleTo Include="FreeP.App.Presentation.Tests" />
+    <!-- r139-remediation: same seam, needed by the WPF-hosted regression test for the
+         cross-thread feedback-port crash (WpfPresentationFileFeedbackPort lives in
+         FreeP.App.Host, so its test lives in FreeP.App.Host.Tests, not FreeP.App.Presentation.Tests). -->
+    <InternalsVisibleTo Include="FreeP.App.Host.Tests" />
+  </ItemGroup>
+
+</Project>

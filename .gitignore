@@ -38,10 +38,10 @@ fidelity-corpus/files/
 fidelity-corpus/runs/
 fidelity-corpus/oracle-generated/
 
-# On-demand real-world DOCX fidelity corpus for FreeW. Only the manifest + downloader
+# On-demand real-world DOCX fidelity corpus for Writer. Only the manifest + downloader
 # are committed; downloaded/local documents and generated run outputs stay private.
-freew-fidelity-corpus/files/
-freew-fidelity-corpus/runs/
+writer-fidelity-corpus/files/
+writer-fidelity-corpus/runs/
 
 # Local Excel/FreeX UX parity run artifacts.
 tools/ux-parity-runs/
@@ -65,7 +65,7 @@ enum_tabs.ps1
 *.png
 
 # Committed parity evidence is intentionally versioned, including its PNG fixtures.
-!docs/parity/freew-shell-visual-2026-08-16/avalonia/*.png
+!docs/parity/writer-shell-visual-2026-08-16/avalonia/*.png
 
 # Test run artifacts
 TestResults/

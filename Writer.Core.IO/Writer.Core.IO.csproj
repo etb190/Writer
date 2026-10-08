@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Include="Writer.Shared.Drawing" />
+    <!-- Read-only PDF text import (UglyToad.PdfPig, Apache-2.0); DocumentLayoutAnalysis provides the
+         reading-order text extractor. -->
+    <PackageReference Include="UglyToad.PdfPig" />
+    <PackageReference Include="UglyToad.PdfPig.DocumentLayoutAnalysis" />
+    <!-- Legacy binary Word (.doc/.dot) read-only import; transcodes to .docx for the existing DocxReader. -->
+    <PackageReference Include="DocSharp.Binary.Doc" />
+    <PackageReference Include="DocSharp.Binary.Common" />
+    <!-- Generic Insert Object packages use NPOI's managed OLE/CFB writer. The version is already
+         centrally managed and used by FreeX's legacy Office paths. -->
+    <PackageReference Include="NPOI" />
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Writer.Core.Model/Writer.Core.Model.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.IO/Writer.Shared.IO.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Opc/Writer.Shared.Opc.csproj" />
+    <ProjectReference Include="../shared/Writer.Shared.Pdf/Writer.Shared.Pdf.csproj" />
+    <!-- Shared 45-preset DrawingML geometry tier (see DocxReader.BuildCustomGeometryFromPreset): the
+         DOCX shape reader routes unrecognized a:prstGeom presets through this instead of collapsing
+         them to a plain rectangle. -->
+    <ProjectReference Include="../shared/Writer.Shared.Drawing/Writer.Shared.Drawing.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- HTML/MHTML read path: AngleSharp (HTML5 DOM) + MimeKit (MHTML multipart/related). Both MIT. -->
+    <PackageReference Include="AngleSharp" />
+    <PackageReference Include="MimeKit" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Lets the IO test project exercise the internal ODTTF obfuscation helper (Ooxml.ObfuscateFont). -->
+    <InternalsVisibleTo Include="Writer.Core.IO.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Writer.Shared.IO" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="SmartArtLayoutTemplates//*.xml" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,1 @@
+global using WriterAvaloniaWindowBoundsTranslator = Writer.Shared.Shell.Avalonia.AvaloniaWindowBoundsTranslator;

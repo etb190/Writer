@@ -1,3 +1,0 @@
-0a5af2ca9ec136950bb6d7a822514ed282e54331b58095e0810586e4e0803f88  README.md
-e1a30cebaa7f32ecebd73a03d7cac7e475614a75cdb636954a02bdf6efa4c6db  wave197-freew-legal-notices-template-candidates.json
-3c44fe7c23c6786834898052624a63d13aee8efe6de1cb7793dfcc94c1a38a00  wave197-freew-legal-notices-raw-evidence.json

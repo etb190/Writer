@@ -1,0 +1,34 @@
+<Solution>
+  <Folder Name="/shared/">
+    <Project Path="shared/Writer.Shared.AppServices/Writer.Shared.AppServices.csproj" />
+    <Project Path="shared/Writer.Shared.AppServices.Windows/Writer.Shared.AppServices.Windows.csproj" />
+    <Project Path="shared/Writer.Shared.Commands/Writer.Shared.Commands.csproj" />
+    <Project Path="shared/Writer.Shared.Drawing/Writer.Shared.Drawing.csproj" />
+    <Project Path="shared/Writer.Shared.IO/Writer.Shared.IO.csproj" />
+    <Project Path="shared/Writer.Shared.Localization/Writer.Shared.Localization.csproj" />
+    <Project Path="shared/Writer.Shared.Opc/Writer.Shared.Opc.csproj" />
+    <Project Path="shared/Writer.Shared.PageSetup/Writer.Shared.PageSetup.csproj" />
+    <Project Path="shared/Writer.Shared.Pdf/Writer.Shared.Pdf.csproj" />
+    <Project Path="shared/Writer.Shared.Pdf.Skia/Writer.Shared.Pdf.Skia.csproj" />
+    <Project Path="shared/Writer.Shared.Pdf.Wpf/Writer.Shared.Pdf.Wpf.csproj" />
+    <Project Path="shared/Writer.Shared.Ribbon/Writer.Shared.Ribbon.csproj" />
+    <Project Path="shared/Writer.Shared.Ribbon.Avalonia/Writer.Shared.Ribbon.Avalonia.csproj" />
+    <Project Path="shared/Writer.Shared.Ribbon.Wpf/Writer.Shared.Ribbon.Wpf.csproj" />
+    <Project Path="shared/Writer.Shared.Shell/Writer.Shared.Shell.csproj" />
+    <Project Path="shared/Writer.Shared.Shell.Avalonia/Writer.Shared.Shell.Avalonia.csproj" />
+    <Project Path="shared/Writer.Shared.Shell.Wpf/Writer.Shared.Shell.Wpf.csproj" />
+    <Project Path="shared/Writer.Shared.TextSearch/Writer.Shared.TextSearch.csproj" />
+    <Project Path="shared/Writer.Shared.Theme/Writer.Shared.Theme.csproj" />
+    <Project Path="shared/Writer.Shared.Theme.Avalonia/Writer.Shared.Theme.Avalonia.csproj" />
+    <Project Path="shared/Writer.Shared.Theme.Wpf/Writer.Shared.Theme.Wpf.csproj" />
+  </Folder>
+  <Folder Name="/app/">
+    <Project Path="Writer.App.Avalonia/Writer.App.Avalonia.csproj" />
+    <Project Path="Writer.App.Host/Writer.App.Host.csproj" />
+    <Project Path="Writer.App.Localization/Writer.App.Localization.csproj" />
+    <Project Path="Writer.App.Presentation/Writer.App.Presentation.csproj" />
+    <Project Path="Writer.Core.IO/Writer.Core.IO.csproj" />
+    <Project Path="Writer.Core.Model/Writer.Core.Model.csproj" />
+    <Project Path="Writer.Ribbon.Definitions/Writer.Ribbon.Definitions.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,62 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using Writer.Shared.Ribbon.Icons;
+using SharedRibbonIconFactory = Writer.Shared.Ribbon.Wpf.RibbonIconFactory;
+using SvgCommandIconLoader = Writer.Shared.Ribbon.Wpf.SvgCommandIconLoader;
+
+namespace Writer.App.Host;
+
+internal static class RibbonIconFactory
+{
+    private static readonly SvgCommandIconLoader CommandIconLoader = new(
+        resourceFolder: "CommandIconsSvg",
+        slugFromCommandName: ToCommandIconSlug,
+        slugCandidates: GetCommandIconSlugCandidates,
+        sizeKeySelector: size => size <= 22 ? "s" : "l");
+
+    public static FrameworkElement CreateCommandIcon(
+        string commandName,
+        RibbonCommandIcon fallbackIcon,
+        double size,
+        Brush glyphBrush)
+    {
+        return TryCreateCommandIcon(commandName, fallbackIcon, size, glyphBrush)
+            ?? SharedRibbonIconFactory.CreateIcon(fallbackIcon, size, glyphBrush);
+    }
+
+    public static FrameworkElement? TryCreateCommandIcon(
+        string commandName,
+        RibbonCommandIcon fallbackIcon,
+        double size,
+        Brush glyphBrush)
+    {
+        if (TryLoadCommandIcon(commandName, glyphBrush, size) is { } source)
+        {
+            return new Image
+            {
+                Source = source,
+                Width = size,
+                Height = size,
+                Stretch = Stretch.Uniform,
+                SnapsToDevicePixels = true,
+                UseLayoutRounding = true
+            };
+        }
+
+        return null;
+    }
+
+    private static ImageSource? TryLoadCommandIcon(string commandName, Brush glyphBrush, double size) =>
+        CommandIconLoader.TryLoad(commandName, glyphBrush, size);
+
+    internal static IEnumerable<string> GetCommandIconSlugCandidates(string slug)
+    {
+        // Prefer aliases so overloaded names such as "size" resolve to the intended Writer artwork.
+        foreach (var candidate in RibbonCommandIconSlugAliases.GetCandidates(slug))
+            yield return candidate;
+    }
+
+    internal static string ToCommandIconSlug(string text) =>
+        RibbonCommandIconPolicy.ToCommandIconSlug(text, "writer.");
+}

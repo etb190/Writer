@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Writer.Shared.Ribbon.Avalonia</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Writer.Shared.Ribbon/Writer.Shared.Ribbon.csproj" />
+    <ProjectReference Include="../Writer.Shared.Shell/Writer.Shared.Shell.csproj" />
+    <ProjectReference Include="../Writer.Shared.Shell.Avalonia/Writer.Shared.Shell.Avalonia.csproj" />
+    <ProjectReference Include="../Writer.Shared.Theme/Writer.Shared.Theme.csproj" />
+    <ProjectReference Include="../Writer.Shared.Theme.Avalonia/Writer.Shared.Theme.Avalonia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Writer.Shared.Ribbon" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FreeX renderer tests verify the internal palette and theme application helpers. -->
+    <InternalsVisibleTo Include="FreeX.App.Avalonia.Tests" />
+  </ItemGroup>
+
+</Project>

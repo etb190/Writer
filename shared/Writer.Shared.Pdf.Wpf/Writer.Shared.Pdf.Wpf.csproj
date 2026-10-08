@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WPF/PDFsharp companion to the neutral Writer.Shared.Pdf tier: rasterized-page + overlay
+         emission used by both FreeX and Writer host (Windows) PDF export. Mirrors the
+         Writer.Shared.Shell / Writer.Shared.Shell.Wpf split. -->
+    <ProjectReference Include="../Writer.Shared.Pdf/Writer.Shared.Pdf.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PDFsharp-WPF" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Writer.Shared.Pdf.Wpf.Tests" />
+  </ItemGroup>
+
+</Project>
