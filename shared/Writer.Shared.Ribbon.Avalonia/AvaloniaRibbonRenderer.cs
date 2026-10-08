@@ -1538,7 +1538,10 @@ public static class AvaloniaRibbonRenderer
                 new Setter(TemplatedControl.BorderThicknessProperty, new Thickness(1)),
                 new Setter(TemplatedControl.FontSizeProperty, 12d),
                 new Setter(TemplatedControl.FontFamilyProperty, RibbonFontFamily),
-                new Setter(TemplatedControl.PaddingProperty, new Thickness(6, 0, 18, 0)),
+                // No right padding: the Fluent combo template already reserves a fixed 32px
+                // chevron column, so right padding only starves the text column of narrow
+                // combos (e.g. the font-size picker) once the editable text box hugs it.
+                new Setter(TemplatedControl.PaddingProperty, new Thickness(6, 0, 0, 0)),
             },
         };
         var comboTemplateShell = new Style(x => x.OfType<ComboBox>().Template().OfType<Border>())
@@ -1553,14 +1556,17 @@ public static class AvaloniaRibbonRenderer
         };
         // The editable text box inside the combo keeps Fluent's 32px MinHeight and a top-aligned
         // presenter, which pins the selected value to the clipped top-left corner of the ~26px
-        // ribbon row. Hug the text height and center it; the template already binds the combo's
-        // Foreground/VerticalContentAlignment into this part, but pin them so variant resources
-        // can never win.
+        // ribbon row. It also keeps Fluent's 64px TextControlThemeMinWidth, which OVERFLOWS the
+        // text column of narrow combos (the 64px font-size picker) underneath the chevron zone.
+        // Hug both dimensions, center the value, and pin the ink; the template already binds the
+        // combo's Foreground/VerticalContentAlignment into this part, but pin them so variant
+        // resources can never win.
         var comboEditableText = new Style(x => x.OfType<ComboBox>().Template().OfType<TextBox>())
         {
             Setters =
             {
                 new Setter(Layoutable.MinHeightProperty, 0d),
+                new Setter(Layoutable.MinWidthProperty, 0d),
                 new Setter(TextBox.VerticalContentAlignmentProperty, VerticalAlignment.Center),
                 new Setter(TemplatedControl.ForegroundProperty, Brushes.Black),
                 new Setter(TemplatedControl.BackgroundProperty, Brushes.Transparent),
@@ -2270,7 +2276,7 @@ public static class AvaloniaRibbonRenderer
             IsEditable = true,
             FontSize = 12,
             FontFamily = RibbonFontFamily,
-            Padding = new Thickness(6, 0, 18, 0),
+            Padding = new Thickness(6, 0, 0, 0),
             VerticalContentAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0, 2, 0),
             Background = Brushes.White,

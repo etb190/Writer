@@ -65,6 +65,7 @@ public sealed partial class App : Application
     {
         SisterAvaloniaStandardDesktopFactory.Initialize(this, DesktopProfile);
         AddMenuChromeStyles();
+        AddComboChromeResources();
 
         base.OnFrameworkInitializationCompleted();
     }
@@ -174,6 +175,87 @@ public sealed partial class App : Application
         AppStyles.Add(itemPressedHeader);
         AppStyles.Add(itemOpenChevron);
         AppStyles.Add(itemDisabledHeader);
+    }
+
+    /// <summary>
+    /// Overrides the Fluent 12 ComboBox resource keys with the light Office chrome values.
+    /// <para>
+    /// The combo template parts (the popup border, the dropdown chevron glyph, and every
+    /// ComboBoxItem state) bind these keys as DIRECT resource references inside the control
+    /// template, and template value precedence beats ordinary style setters - so the style
+    /// pins in the ribbon renderer silently lose under an OS dark scheme: the popup that
+    /// opens under the font dropdown paints a dark charcoal surface, the chevron renders
+    /// translucent white on the white combo, and item rows resolve dark ink. Redefining the
+    /// keys at application scope fixes every consumer (ribbon combos and dialog combos
+    /// alike) no matter which OS color-scheme variant resolves. Light-OS schemes already
+    /// resolved these keys to the same light values, so nothing changes for them.
+    /// </para>
+    /// </summary>
+    private static void AddComboChromeResources()
+    {
+        var divider = new ImmutableSolidColorBrush(Color.FromRgb(0xDA, 0xDC, 0xE0));
+        var popupBorder = new ImmutableSolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0));
+        var hover = new ImmutableSolidColorBrush(Color.FromRgb(0xE8, 0xEC, 0xF1));
+        var pressed = new ImmutableSolidColorBrush(Color.FromRgb(0xD9, 0xE2, 0xEC));
+        var selected = new ImmutableSolidColorBrush(Color.FromRgb(0xCC, 0xE4, 0xF7));
+        var selectedHover = new ImmutableSolidColorBrush(Color.FromRgb(0xB9, 0xD9, 0xF2));
+        var disabled = new ImmutableSolidColorBrush(Color.FromRgb(0x9A, 0x9A, 0x9A));
+        var placeholder = new ImmutableSolidColorBrush(Color.FromRgb(0x76, 0x76, 0x76));
+
+        var chrome = new ResourceDictionary
+        {
+            // Closed combo surface and ink.
+            ["ComboBoxForeground"] = Brushes.Black,
+            ["ComboBoxBackground"] = Brushes.White,
+            ["ComboBoxBorderBrush"] = divider,
+            ["ComboBoxForegroundDisabled"] = disabled,
+            ["ComboBoxBackgroundDisabled"] = Brushes.White,
+            ["ComboBoxBorderBrushDisabled"] = divider,
+            ["ComboBoxBackgroundPointerOver"] = Brushes.White,
+            ["ComboBoxBorderBrushPointerOver"] = divider,
+            ["ComboBoxBackgroundPressed"] = Brushes.White,
+            ["ComboBoxBorderBrushPressed"] = divider,
+            ["ComboBoxBackgroundUnfocused"] = Brushes.Transparent,
+            ["ComboBoxBackgroundBorderBrushUnfocused"] = Brushes.Transparent,
+            ["ComboBoxBackgroundBorderBrushFocused"] = Brushes.Transparent,
+            ["ComboBoxForegroundFocused"] = Brushes.Black,
+            ["ComboBoxForegroundFocusedPressed"] = Brushes.Black,
+            ["ComboBoxPlaceHolderForeground"] = placeholder,
+            ["ComboBoxPlaceHolderForegroundFocusedPressed"] = placeholder,
+
+            // Dropdown chevron and the popup surface that opens under the combo.
+            ["ComboBoxDropDownGlyphForeground"] = Brushes.Black,
+            ["ComboBoxDropDownGlyphForegroundFocused"] = Brushes.Black,
+            ["ComboBoxDropDownGlyphForegroundFocusedPressed"] = Brushes.Black,
+            ["ComboBoxDropDownGlyphForegroundDisabled"] = disabled,
+            ["ComboBoxDropDownBackground"] = Brushes.White,
+            ["ComboBoxDropDownBorderBrush"] = popupBorder,
+
+            // Dropdown rows: white surface, black ink, light Office hover/selected tints.
+            ["ComboBoxItemForeground"] = Brushes.Black,
+            ["ComboBoxItemBackground"] = Brushes.Transparent,
+            ["ComboBoxItemBorderBrushDisabled"] = Brushes.Transparent,
+            ["ComboBoxItemForegroundPointerOver"] = Brushes.Black,
+            ["ComboBoxItemBackgroundPointerOver"] = hover,
+            ["ComboBoxItemBorderBrushPointerOver"] = Brushes.Transparent,
+            ["ComboBoxItemForegroundPressed"] = Brushes.Black,
+            ["ComboBoxItemBackgroundPressed"] = pressed,
+            ["ComboBoxItemBorderBrushPressed"] = Brushes.Transparent,
+            ["ComboBoxItemForegroundSelected"] = Brushes.Black,
+            ["ComboBoxItemBackgroundSelected"] = selected,
+            ["ComboBoxItemForegroundSelectedPointerOver"] = Brushes.Black,
+            ["ComboBoxItemBackgroundSelectedPointerOver"] = selectedHover,
+            ["ComboBoxItemBorderBrushSelectedPointerOver"] = Brushes.Transparent,
+            ["ComboBoxItemForegroundSelectedPressed"] = Brushes.Black,
+            ["ComboBoxItemBackgroundSelectedPressed"] = selectedHover,
+            ["ComboBoxItemBorderBrushSelectedPressed"] = Brushes.Transparent,
+            ["ComboBoxItemForegroundDisabled"] = disabled,
+            ["ComboBoxItemBackgroundDisabled"] = Brushes.Transparent,
+            ["ComboBoxItemForegroundSelectedDisabled"] = disabled,
+            ["ComboBoxItemBackgroundSelectedDisabled"] = selected,
+            ["ComboBoxItemBorderBrushSelectedDisabled"] = Brushes.Transparent,
+        };
+        Application.Current!.Resources.MergedDictionaries.Add(chrome);
     }
 
     private static Styles AppStyles => Application.Current!.Styles;
