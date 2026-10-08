@@ -2460,10 +2460,46 @@ public static class AvaloniaRibbonRenderer
             toggle.Click += (_, _) => Execute(control.CommandId, registry, afterExecute);
         }
 
+        AttachTooltip(element, control);
+
         if (attachMenu)
             ApplyControlEnablement(element, control, registry, palette);
         else
             ApplyStateAndEnablement(element, control.CommandId, registry, palette);
+    }
+
+    /// <summary>
+    /// Attaches an Office-style tooltip to every interactive ribbon control so icon-only commands
+    /// stay discoverable. Mirrors the WPF host's <c>RibbonTooltip</c>: a bold title (the explicit
+    /// tooltip title when authored, otherwise the command label) plus an optional description line.
+    /// </summary>
+    private static void AttachTooltip(ContentControl element, RibbonControl control)
+    {
+        var title = string.IsNullOrWhiteSpace(control.TooltipTitle) ? control.Label : control.TooltipTitle!;
+        if (string.IsNullOrWhiteSpace(title))
+            return;
+
+        var panel = new StackPanel { MaxWidth = 340 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 13,
+            TextWrapping = TextWrapping.Wrap,
+        });
+
+        if (!string.IsNullOrWhiteSpace(control.TooltipDescription))
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = control.TooltipDescription!,
+                FontSize = 12,
+                Opacity = 0.85,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        ToolTip.SetTip(element, panel);
     }
 
     private static void ApplyEnablement(Control element, RibbonControl control, IRibbonCommandRegistry? registry, AvaloniaRibbonPalette? palette = null)

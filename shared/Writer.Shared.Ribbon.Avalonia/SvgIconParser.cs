@@ -70,7 +70,27 @@ internal static class SvgIconParser
     {
         try
         {
-            var doc = XDocument.Load(filePath);
+            return TryParseText(File.ReadAllText(filePath), monochromeBrush, includeViewBoxBounds);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses SVG markup from memory (embedded manifest resource, stream, or string) with the same
+    /// semantics as <see cref="TryParseFile(string, IBrush?, bool)"/>. Returns <see langword="null"/>
+    /// when the markup is unreadable or contains nothing renderable.
+    /// </summary>
+    public static DrawingImage? TryParseText(
+        string svgText,
+        IBrush? monochromeBrush = null,
+        bool includeViewBoxBounds = true)
+    {
+        try
+        {
+            var doc = XDocument.Parse(svgText);
             var root = doc.Root;
             if (root is null)
                 return null;

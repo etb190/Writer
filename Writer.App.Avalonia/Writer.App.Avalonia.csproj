@@ -129,6 +129,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      Command icon artwork is embedded into the app assembly so the single-file portable
+      build shows the full Office-style glyph set even when no loose Resources folder
+      ships next to the executable. AvaloniaRibbonIcons reads these manifest resources as
+      a fallback after the on-disk Resources/CommandIconsSvg directory.
+    -->
+    <EmbeddedResource Include="../Writer.Ribbon.Definitions/Resources/CommandIconsSvg/**/*.svg"
+                      LogicalName="Writer.Icons.Command.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Runtime and package assets derive from one owned Writer identity source in the shared shell. -->
     <Content Include="$(BrandWindowsIconPath)"
              Link="Resources/$(BrandWindowsIconFileName)"

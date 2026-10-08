@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="PivotTable">
+  <rect width="32" height="32" fill="none"/>
+  <rect x="4.5" y="5.5" width="21" height="21" rx="1" fill="#ffffff" stroke="#242424" stroke-width="1.5"/>
+  <rect x="5.5" y="6.5" width="19" height="5" fill="#E6F6FA"/>
+  <path d="M4.5 12.5h21M4.5 19.5h21M11.5 5.5v21M18.5 5.5v21" fill="none" stroke="#5c5c5c" stroke-width="1"/>
+  <path d="M10.5 15.5h9v7" fill="none" stroke="#0078d4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M17 20l2.5 2.5L22 20" fill="none" stroke="#0078d4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M10.5 15.5l2.5-2.5M10.5 15.5l2.5 2.5" fill="none" stroke="#0078d4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

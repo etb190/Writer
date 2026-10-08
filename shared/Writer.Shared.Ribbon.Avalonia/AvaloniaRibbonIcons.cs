@@ -177,6 +177,8 @@ public static class AvaloniaRibbonIcons
         DrawingImage? image = null;
         if (File.Exists(filePath))
             image = SvgIconParser.TryParseFile(filePath);
+        else
+            image = TryParseEmbeddedCommandSvg(fileSlug, monochromeForeground);
 
         CommandIconCache[fileSlug] = image;
         return image;
@@ -192,9 +194,35 @@ public static class AvaloniaRibbonIcons
         DrawingImage? image = null;
         if (File.Exists(filePath))
             image = SvgIconParser.TryParseFile(filePath, foreground);
+        else
+            image = TryParseEmbeddedCommandSvg(fileSlug, foreground);
 
         CommandIconMonochromeCache[cacheKey] = image;
         return image;
+    }
+
+    // The single-file portable build embeds the command SVG set into the app assembly
+    // ("Writer.Icons.Command.<slug>.svg") so the full artwork ships even when no loose
+    // Resources folder sits next to the executable. Disk wins when both exist.
+    private static DrawingImage? TryParseEmbeddedCommandSvg(string fileSlug, IBrush? monochromeForeground)
+    {
+        var assembly = System.Reflection.Assembly.GetEntryAssembly();
+        if (assembly is null)
+            return null;
+
+        try
+        {
+            using var stream = assembly.GetManifestResourceStream($"Writer.Icons.Command.{fileSlug}.svg");
+            if (stream is null)
+                return null;
+
+            using var reader = new StreamReader(stream);
+            return SvgIconParser.TryParseText(reader.ReadToEnd(), monochromeForeground);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string GetBrushCacheKey(IBrush brush) =>

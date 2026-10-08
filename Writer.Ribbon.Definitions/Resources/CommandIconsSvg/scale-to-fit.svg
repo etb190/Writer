@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Scale to Fit">
+  <rect width="32" height="32" fill="none"/>
+  <rect x="6.5" y="5.5" width="19" height="21" rx="1.5" fill="#ffffff" stroke="#242424" stroke-width="1.5"/>
+  <path d="M12 11l4 4M12 11h4M12 11v4M20 21l-4-4M20 21h-4M20 21v-4" fill="none" stroke="#0F6D8C" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M10 24h12" fill="none" stroke="#8a8a8a" stroke-width="1.1" stroke-linecap="round"/>
+</svg>

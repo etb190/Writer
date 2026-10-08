@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Add sheet">
+  <rect width="32" height="32" fill="none"/>
+  <g fill="none" stroke="#242424" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke">
+    <rect x="5.5" y="7.5" width="17" height="16" rx="1.5"/>
+    <path d="M5.5 12.8h17M10.8 7.5v16M16.1 7.5v16"/>
+  </g>
+  <g fill="none" stroke="#0F6D8C" stroke-width="1.7" stroke-linecap="round" vector-effect="non-scaling-stroke">
+    <path d="M25.5 10v7M22 13.5h7"/>
+  </g>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Ungroup sheets">
+  <rect width="32" height="32" fill="none"/>
+  <g fill="none" stroke="#242424" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke">
+    <path d="M5 20h9c1.2 0 2-0.8 2-2v-4c0-1.2.8-2 2-2h2"/>
+    <path d="M18 21h5c1.2 0 2-0.8 2-2v-4"/>
+    <path d="M15.5 8.5v15"/>
+  </g>
+</svg>
