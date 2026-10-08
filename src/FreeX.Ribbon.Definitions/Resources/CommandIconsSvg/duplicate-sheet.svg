@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Duplicate sheet">
-  <rect width="32" height="32" fill="none"/>
-  <g fill="none" stroke="#242424" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke">
-    <rect x="9" y="6" width="15" height="14" rx="1.5"/>
-    <rect x="6" y="10" width="15" height="15" rx="1.5" fill="#ffffff"/>
-    <path d="M6 15h15M11 10v15M16 10v15"/>
-  </g>
-</svg>

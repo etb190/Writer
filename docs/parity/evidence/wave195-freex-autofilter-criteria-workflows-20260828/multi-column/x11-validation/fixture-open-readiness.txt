@@ -1,3 +1,0 @@
-expected-document=freex-wave195-autofilter-multi-column.xlsx
-observed-window-title=freex-wave195-autofilter-multi-column.xlsx * - FreeX
-status=passed

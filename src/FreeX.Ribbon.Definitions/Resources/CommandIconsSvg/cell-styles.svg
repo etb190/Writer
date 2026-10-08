@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Cell Styles">
-  <rect width="32" height="32" fill="none"/>
-  <rect x="3.5" y="7.5" width="22" height="22" rx="1" fill="#ffffff" stroke="#242424" stroke-width="1"/>
-  <path d="M3.5 14.5H25.5M3.5 22.5H25.5M10.5 7.5V29.5M18.5 7.5V29.5" fill="none" stroke="#242424" stroke-width="1"/>
-  <path d="M23 1.5L25 7.5L31 7.5L26 11.5L28 17.5L23 14L18 17.5L20 11.5L15 7.5L21 7.5Z" fill="#ffb900" stroke="#242424" stroke-width="1" stroke-linejoin="miter"/>
-</svg>

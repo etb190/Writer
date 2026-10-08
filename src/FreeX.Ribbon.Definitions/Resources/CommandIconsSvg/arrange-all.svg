@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Arrange All">
-  <rect width="32" height="32" fill="none"/>
-  <rect x="5.5" y="6.5" width="9" height="7" rx="1.1" fill="#ffffff" stroke="#242424" stroke-width="1.3"/>
-  <rect x="17.5" y="6.5" width="9" height="7" rx="1.1" fill="#ffffff" stroke="#242424" stroke-width="1.3"/>
-  <rect x="5.5" y="18.5" width="9" height="7" rx="1.1" fill="#ffffff" stroke="#242424" stroke-width="1.3"/>
-  <rect x="17.5" y="18.5" width="9" height="7" rx="1.1" fill="#E6F6FA" stroke="#242424" stroke-width="1.3"/>
-</svg>

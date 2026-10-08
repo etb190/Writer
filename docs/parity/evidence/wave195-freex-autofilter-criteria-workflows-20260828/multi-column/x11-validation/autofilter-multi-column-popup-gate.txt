@@ -1,8 +1,0 @@
-schema-version=1
-region-menu-open=true
-both-menu-open=true
-category-change-menu-open=true
-region-clear-menu-open=true
-all-clear-menu-open=true
-gate=true
-
