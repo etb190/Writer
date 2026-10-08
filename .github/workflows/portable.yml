@@ -5,7 +5,9 @@ name: Portable build
 # binary; natives unpack themselves to a temp dir on first launch). Every run publishes
 # the executable directly on the Releases page — manual runs roll the "latest"
 # pre-release in place; a `writer-v*` tag makes a versioned release. The asset downloads
-# raw from the release: no zip wrapper, no Actions artifacts, no other platforms.
+# raw from the release: no zip wrapper, no other platforms. The same executable is also
+# uploaded as a run artifact so it can be downloaded straight from the Actions run page
+# (GitHub wraps run-artifact downloads in a zip; the release asset stays a raw exe).
 
 on:
   workflow_dispatch:
@@ -89,3 +91,12 @@ jobs:
           overwrite_files: true
           files: Writer-win-x64.exe
           generate_release_notes: ${{ github.ref_type == 'tag' }}
+
+      - name: Upload exe to this Actions run
+        uses: actions/upload-artifact@v4
+        with:
+          name: Writer-win-x64
+          path: Writer-win-x64.exe
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
