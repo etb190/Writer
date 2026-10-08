@@ -1,0 +1,99 @@
+name: Portable build
+
+# Builds self-contained portable zips of the Writer Avalonia desktop app.
+# Every zip extracts to a flat folder with the Writer executable at its root —
+# no installer, no shared runtime required. Manual runs upload the zips as
+# workflow artifacts; a `writer-v*` tag additionally publishes them to a
+# GitHub Release.
+#
+# RIDs mirror Writer.App.Avalonia.csproj RuntimeIdentifiers.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'writer-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: portable-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  portable:
+    name: ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.400
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            v="${GITHUB_REF_NAME#writer-v}"
+          else
+            v="0.0.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=${v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish self-contained ${{ matrix.rid }}
+        run: |
+          dotnet publish Writer.App.Avalonia/Writer.App.Avalonia.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:Version=${{ steps.ver.outputs.version }} \
+            -p:ContinuousIntegrationBuild=true \
+            -o "out/${{ matrix.rid }}"
+
+      - name: Package zip
+        run: |
+          if [[ "${{ matrix.rid }}" != "win-x64" ]]; then
+            chmod +x "out/${{ matrix.rid }}/Writer"
+          fi
+          cd "out/${{ matrix.rid }}"
+          zip -r -9 "${GITHUB_WORKSPACE}/Writer-${{ steps.ver.outputs.version }}-portable-${{ matrix.rid }}.zip" .
+          cd "${GITHUB_WORKSPACE}"
+          ls -lh Writer-*.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.rid }}
+          path: Writer-*-portable-*.zip
+          if-no-files-found: error
+
+  release:
+    name: Attach zips to release
+    if: startsWith(github.ref, 'refs/tags/writer-v')
+    needs: portable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all zips
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: release
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.zip
+          generate_release_notes: true

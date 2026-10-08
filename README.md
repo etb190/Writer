@@ -45,8 +45,22 @@ dotnet build Writer.slnx
 
 - The Avalonia front end builds and runs cross-platform.
 - The WPF host (`Writer.App.Host`) builds on Windows.
-- Linux packaging scripts (AppImage, deb, tarball) live in
-  `Writer.App.Avalonia/Packaging/linux/`.
+
+## Portable builds
+
+GitHub Actions builds ready-to-run portable zips of the Avalonia app for
+`win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`. Each zip is
+fully self-contained (no .NET runtime install needed) and extracts to a flat
+folder with the `Writer` executable at its root.
+
+- **Manual runs** — start the *Portable build* workflow from the Actions tab;
+  the zips appear under that run's **Artifacts**.
+- **Tagged releases** — pushing a `writer-v*` tag (e.g. `writer-v0.9.0`) builds
+  all five targets and attaches the zips to a GitHub Release.
+
+Notes: on Windows, extract anywhere and run `Writer.exe`. On Linux and macOS,
+the executable is `Writer`; macOS builds are unsigned, so the first launch may
+require right-click → **Open** (or clearing the quarantine attribute).
 
 ## Status
 
