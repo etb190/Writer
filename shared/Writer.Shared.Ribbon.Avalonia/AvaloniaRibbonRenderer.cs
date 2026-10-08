@@ -1545,9 +1545,27 @@ public static class AvaloniaRibbonRenderer
         {
             Setters = { new Setter(Border.BackgroundProperty, Brushes.White) },
         };
-        var comboTemplateGlyph = new Style(x => x.OfType<ComboBox>().Template().OfType<global::Avalonia.Controls.Shapes.Path>())
+        // The dropdown glyph is a PathIcon whose Foreground is a variant resource — under an OS
+        // dark scheme it renders white over the pinned white shell, i.e. an invisible chevron.
+        var comboTemplateGlyph = new Style(x => x.OfType<ComboBox>().Template().OfType<PathIcon>())
         {
-            Setters = { new Setter(Shape.FillProperty, Brushes.Black) },
+            Setters = { new Setter(TemplatedControl.ForegroundProperty, Brushes.Black) },
+        };
+        // The editable text box inside the combo keeps Fluent's 32px MinHeight and a top-aligned
+        // presenter, which pins the selected value to the clipped top-left corner of the ~26px
+        // ribbon row. Hug the text height and center it; the template already binds the combo's
+        // Foreground/VerticalContentAlignment into this part, but pin them so variant resources
+        // can never win.
+        var comboEditableText = new Style(x => x.OfType<ComboBox>().Template().OfType<TextBox>())
+        {
+            Setters =
+            {
+                new Setter(Layoutable.MinHeightProperty, 0d),
+                new Setter(TextBox.VerticalContentAlignmentProperty, VerticalAlignment.Center),
+                new Setter(TemplatedControl.ForegroundProperty, Brushes.Black),
+                new Setter(TemplatedControl.BackgroundProperty, Brushes.Transparent),
+                new Setter(TemplatedControl.BorderThicknessProperty, new Thickness(0)),
+            },
         };
 
         var checkBase = new Style(x => x.OfType<CheckBox>())
@@ -1623,6 +1641,7 @@ public static class AvaloniaRibbonRenderer
         tabControl.Styles.Add(comboBase);
         tabControl.Styles.Add(comboTemplateShell);
         tabControl.Styles.Add(comboTemplateGlyph);
+        tabControl.Styles.Add(comboEditableText);
         tabControl.Styles.Add(checkBase);
         tabControl.Styles.Add(disabledButtons);
         tabControl.Styles.Add(disabledToggles);

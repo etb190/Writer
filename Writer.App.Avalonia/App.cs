@@ -1,5 +1,11 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Primitives;
+using Avalonia.Media;
+using Avalonia.Media.Immutable;
+using Avalonia.Styling;
 using Writer.Shared.AppServices;
 using Writer.Shared.Theme;
 using Writer.Shared.Theme.Avalonia;
@@ -58,9 +64,119 @@ public sealed partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         SisterAvaloniaStandardDesktopFactory.Initialize(this, DesktopProfile);
+        AddMenuChromeStyles();
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    /// <summary>
+    /// Pins every menu/flyout popup to the Office-style light chrome the rest of this shell
+    /// paints: black ink on a white surface, gray accelerators/chevrons, light hover tints.
+    /// <para>
+    /// Fluent resolves all menu ink from the OS color-scheme variant (ThemeVariant.Default), so
+    /// under an OS dark scheme the dropdown menus render white item text over the light surfaces
+    /// the shell projects behind its popups — the home-tab Font / Paragraph / Styles / Editing
+    /// dropdowns then show text that is invisible against its own background, and submenus and
+    /// context menus inherit the same mismatch. App-level styles are applied after the
+    /// FluentTheme ControlTheme styles, so every setter here wins in the state it targets.
+    /// </para>
+    /// </summary>
+    private static void AddMenuChromeStyles()
+    {
+        var hoverBrush = new ImmutableSolidColorBrush(Color.FromRgb(0xE8, 0xEC, 0xF1));
+        var pressedBrush = new ImmutableSolidColorBrush(Color.FromRgb(0xD9, 0xE2, 0xEC));
+        var popupBorderBrush = new ImmutableSolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0));
+        var acceleratorBrush = new ImmutableSolidColorBrush(Color.FromRgb(0x76, 0x76, 0x76));
+        var acceleratorFocusBrush = new ImmutableSolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x4A));
+        var chevronBrush = new ImmutableSolidColorBrush(Color.FromRgb(0x5A, 0x5A, 0x5A));
+        var chevronFocusBrush = new ImmutableSolidColorBrush(Color.FromRgb(0x30, 0x30, 0x30));
+        var disabledBrush = new ImmutableSolidColorBrush(Color.FromRgb(0x9A, 0x9A, 0x9A));
+
+        var flyoutPresenter = new Style(s => s.OfType<MenuFlyoutPresenter>())
+        {
+            Setters =
+            {
+                new Setter(TemplatedControl.BackgroundProperty, Brushes.White),
+                new Setter(TemplatedControl.BorderBrushProperty, popupBorderBrush),
+            },
+        };
+
+        // Base row: white fill with black ink. Header text, check marks, and radio glyphs all
+        // resolve through MenuItem.Foreground.
+        var itemBase = new Style(s => s.OfType<MenuItem>())
+        {
+            Setters =
+            {
+                new Setter(TemplatedControl.BackgroundProperty, Brushes.White),
+                new Setter(TemplatedControl.ForegroundProperty, Brushes.Black),
+            },
+        };
+        // The MenuItem template paints two backgrounds straight from variant resources: the row
+        // border (PART_LayoutRoot) and the unnamed submenu popup border. Override both.
+        var itemBorders = new Style(s => s.OfType<MenuItem>().Template().OfType<Border>())
+        {
+            Setters = { new Setter(Border.BackgroundProperty, Brushes.White) },
+        };
+        var gestureBase = new Style(s => s.OfType<MenuItem>().Template().OfType<TextBlock>().Name("PART_InputGestureText"))
+        {
+            Setters = { new Setter(TemplatedControl.ForegroundProperty, acceleratorBrush) },
+        };
+        var chevronBase = new Style(s => s.OfType<MenuItem>().Template().OfType<global::Avalonia.Controls.Shapes.Path>().Name("PART_ChevronPath"))
+        {
+            Setters = { new Setter(global::Avalonia.Controls.Shapes.Shape.FillProperty, chevronBrush) },
+        };
+
+        // Hover / pressed / submenu-open / disabled states — Fluent drives each of these from
+        // variant resources, so re-pin them here in the light chrome.
+        var itemSelectedRow = new Style(s => s.OfType<MenuItem>().Class(":selected").Template().OfType<Border>().Name("PART_LayoutRoot"))
+        {
+            Setters = { new Setter(Border.BackgroundProperty, hoverBrush) },
+        };
+        var itemSelectedHeader = new Style(s => s.OfType<MenuItem>().Class(":selected").Template().OfType<ContentPresenter>().Name("PART_HeaderPresenter"))
+        {
+            Setters = { new Setter(TemplatedControl.ForegroundProperty, Brushes.Black) },
+        };
+        var itemSelectedGesture = new Style(s => s.OfType<MenuItem>().Class(":selected").Template().OfType<TextBlock>().Name("PART_InputGestureText"))
+        {
+            Setters = { new Setter(TemplatedControl.ForegroundProperty, acceleratorFocusBrush) },
+        };
+        var itemSelectedChevron = new Style(s => s.OfType<MenuItem>().Class(":selected").Template().OfType<global::Avalonia.Controls.Shapes.Path>().Name("PART_ChevronPath"))
+        {
+            Setters = { new Setter(global::Avalonia.Controls.Shapes.Shape.FillProperty, chevronFocusBrush) },
+        };
+        var itemPressedRow = new Style(s => s.OfType<MenuItem>().Class(":pressed").Template().OfType<Border>().Name("PART_LayoutRoot"))
+        {
+            Setters = { new Setter(Border.BackgroundProperty, pressedBrush) },
+        };
+        var itemPressedHeader = new Style(s => s.OfType<MenuItem>().Class(":pressed").Template().OfType<ContentPresenter>().Name("PART_HeaderPresenter"))
+        {
+            Setters = { new Setter(TemplatedControl.ForegroundProperty, Brushes.Black) },
+        };
+        var itemOpenChevron = new Style(s => s.OfType<MenuItem>().Class(":open").Template().OfType<global::Avalonia.Controls.Shapes.Path>().Name("PART_ChevronPath"))
+        {
+            Setters = { new Setter(global::Avalonia.Controls.Shapes.Shape.FillProperty, chevronFocusBrush) },
+        };
+        var itemDisabledHeader = new Style(s => s.OfType<MenuItem>().Class(":disabled").Template().OfType<ContentPresenter>().Name("PART_HeaderPresenter"))
+        {
+            Setters = { new Setter(TemplatedControl.ForegroundProperty, disabledBrush) },
+        };
+
+        AppStyles.Add(flyoutPresenter);
+        AppStyles.Add(itemBase);
+        AppStyles.Add(itemBorders);
+        AppStyles.Add(gestureBase);
+        AppStyles.Add(chevronBase);
+        AppStyles.Add(itemSelectedRow);
+        AppStyles.Add(itemSelectedHeader);
+        AppStyles.Add(itemSelectedGesture);
+        AppStyles.Add(itemSelectedChevron);
+        AppStyles.Add(itemPressedRow);
+        AppStyles.Add(itemPressedHeader);
+        AppStyles.Add(itemOpenChevron);
+        AppStyles.Add(itemDisabledHeader);
+    }
+
+    private static Styles AppStyles => Application.Current!.Styles;
 
     /// <summary>
     /// R169 one-time recovery for a user who already has two settings.json files because a pre-fix
