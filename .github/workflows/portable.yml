@@ -1,10 +1,10 @@
 name: Portable build
 
-# Builds self-contained portable zips of the Writer Avalonia desktop app.
-# Every zip extracts to a flat folder with the Writer executable at its root —
-# no installer, no shared runtime required. Manual runs upload the zips as
-# workflow artifacts; a `writer-v*` tag additionally publishes them to a
-# GitHub Release.
+# Builds a single self-contained executable of the Writer Avalonia desktop app
+# per platform (PublishSingleFile: the .NET runtime and native libraries are
+# embedded in one binary; natives unpack themselves to a temp dir on first
+# launch). Manual runs upload each executable as a workflow artifact; a
+# `writer-v*` tag additionally publishes them to a GitHub Release.
 #
 # RIDs mirror Writer.App.Avalonia.csproj RuntimeIdentifiers.
 
@@ -53,40 +53,44 @@ jobs:
           fi
           echo "version=${v}" >> "${GITHUB_OUTPUT}"
 
-      - name: Publish self-contained ${{ matrix.rid }}
+      - name: Publish single-file ${{ matrix.rid }}
         run: |
           dotnet publish Writer.App.Avalonia/Writer.App.Avalonia.csproj \
             -c Release \
             -r ${{ matrix.rid }} \
             --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
             -p:Version=${{ steps.ver.outputs.version }} \
             -p:ContinuousIntegrationBuild=true \
-            -o "out/${{ matrix.rid }}"
+            -o out
 
-      - name: Package zip
+      - name: Stage executable
         run: |
-          if [[ "${{ matrix.rid }}" != "win-x64" ]]; then
-            chmod +x "out/${{ matrix.rid }}/Writer"
+          if [[ "${{ matrix.rid }}" == "win-x64" ]]; then
+            src=out/Writer.exe
+          else
+            src=out/Writer
+            chmod +x "${src}"
           fi
-          cd "out/${{ matrix.rid }}"
-          zip -r -9 "${GITHUB_WORKSPACE}/Writer-${{ steps.ver.outputs.version }}-portable-${{ matrix.rid }}.zip" .
-          cd "${GITHUB_WORKSPACE}"
-          ls -lh Writer-*.zip
+          cp "${src}" "Writer-${{ steps.ver.outputs.version }}-${{ matrix.rid }}${{ matrix.rid == 'win-x64' && '.exe' || '' }}"
+          ls -lh Writer-*
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: portable-${{ matrix.rid }}
-          path: Writer-*-portable-*.zip
+          name: Writer-${{ matrix.rid }}
+          path: Writer-*
           if-no-files-found: error
 
   release:
-    name: Attach zips to release
+    name: Attach executables to release
     if: startsWith(github.ref, 'refs/tags/writer-v')
     needs: portable
     runs-on: ubuntu-latest
     steps:
-      - name: Download all zips
+      - name: Download all executables
         uses: actions/download-artifact@v4
         with:
           merge-multiple: true
@@ -95,5 +99,5 @@ jobs:
       - name: Attach to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.zip
+          files: release/Writer-*
           generate_release_notes: true

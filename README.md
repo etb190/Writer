@@ -48,19 +48,20 @@ dotnet build Writer.slnx
 
 ## Portable builds
 
-GitHub Actions builds ready-to-run portable zips of the Avalonia app for
-`win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`. Each zip is
-fully self-contained (no .NET runtime install needed) and extracts to a flat
-folder with the `Writer` executable at its root.
+GitHub Actions builds **one self-contained executable** per platform —
+`win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`. The .NET runtime
+and native libraries are embedded in the binary (compressed), so the Windows
+artifact is a single `Writer-<version>-win-x64.exe` (~50 MB): no installer, no
+runtime install, no loose DLLs. Native libraries unpack themselves to a temp
+folder on first launch.
 
 - **Manual runs** — start the *Portable build* workflow from the Actions tab;
-  the zips appear under that run's **Artifacts**.
+  the executables appear under that run's **Artifacts**.
 - **Tagged releases** — pushing a `writer-v*` tag (e.g. `writer-v0.9.0`) builds
-  all five targets and attaches the zips to a GitHub Release.
+  all five targets and attaches them to a GitHub Release.
 
-Notes: on Windows, extract anywhere and run `Writer.exe`. On Linux and macOS,
-the executable is `Writer`; macOS builds are unsigned, so the first launch may
-require right-click → **Open** (or clearing the quarantine attribute).
+Notes: macOS builds are unsigned, so the first launch may require right-click
+→ **Open** (or clearing the quarantine attribute).
 
 ## Status
 
