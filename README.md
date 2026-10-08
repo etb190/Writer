@@ -55,10 +55,10 @@ artifact is a single `Writer-<version>-win-x64.exe` (~50 MB): no installer, no
 runtime install, no loose DLLs. Native libraries unpack themselves to a temp
 folder on first launch.
 
-- **Manual runs** — start the *Portable build* workflow from the Actions tab;
-  the executables appear under that run's **Artifacts**.
-- **Tagged releases** — pushing a `writer-v*` tag (e.g. `writer-v0.9.0`) builds
-  all five targets and attaches them to a GitHub Release.
+- **Every build** — the executables are published directly on the
+  [Releases page](https://github.com/etb190/Writer/releases) as raw files (no
+  zip wrapper). Manual runs roll the **Latest build** pre-release in place;
+  pushing a `writer-v*` tag (e.g. `writer-v0.9.0`) makes a versioned release.
 
 Notes: macOS builds are unsigned, so the first launch may require right-click
 → **Open** (or clearing the quarantine attribute).

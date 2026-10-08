@@ -3,8 +3,9 @@ name: Portable build
 # Builds a single self-contained executable of the Writer Avalonia desktop app
 # per platform (PublishSingleFile: the .NET runtime and native libraries are
 # embedded in one binary; natives unpack themselves to a temp dir on first
-# launch). Manual runs upload each executable as a workflow artifact; a
-# `writer-v*` tag additionally publishes them to a GitHub Release.
+# launch). Every run publishes the executables directly on the Releases page —
+# manual runs roll the "latest" pre-release in place; a `writer-v*` tag makes
+# a versioned release. Release assets download raw (no zip wrapper).
 #
 # RIDs mirror Writer.App.Avalonia.csproj RuntimeIdentifiers.
 
@@ -70,11 +71,14 @@ jobs:
         run: |
           if [[ "${{ matrix.rid }}" == "win-x64" ]]; then
             src=out/Writer.exe
+            ext=.exe
           else
             src=out/Writer
+            ext=
             chmod +x "${src}"
           fi
-          cp "${src}" "Writer-${{ steps.ver.outputs.version }}-${{ matrix.rid }}${{ matrix.rid == 'win-x64' && '.exe' || '' }}"
+          # Stable asset names so the rolling "latest" release replaces in place.
+          cp "${src}" "Writer-${{ matrix.rid }}${ext}"
           ls -lh Writer-*
 
       - name: Upload artifact
@@ -85,11 +89,25 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Attach executables to release
-    if: startsWith(github.ref, 'refs/tags/writer-v')
+    name: Publish executables
     needs: portable
     runs-on: ubuntu-latest
     steps:
+      - name: Pick release target
+        id: rel
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
+            echo "title=Writer ${GITHUB_REF_NAME#writer-v}" >> "${GITHUB_OUTPUT}"
+            echo "prerelease=false" >> "${GITHUB_OUTPUT}"
+            echo "latest=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "tag=latest" >> "${GITHUB_OUTPUT}"
+            echo "title=Latest build" >> "${GITHUB_OUTPUT}"
+            echo "prerelease=true" >> "${GITHUB_OUTPUT}"
+            echo "latest=false" >> "${GITHUB_OUTPUT}"
+          fi
+
       - name: Download all executables
         uses: actions/download-artifact@v4
         with:
@@ -99,5 +117,10 @@ jobs:
       - name: Attach to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.rel.outputs.tag }}
+          name: ${{ steps.rel.outputs.title }}
+          prerelease: ${{ steps.rel.outputs.prerelease }}
+          make_latest: ${{ steps.rel.outputs.latest }}
+          overwrite_files: true
           files: release/Writer-*
-          generate_release_notes: true
+          generate_release_notes: ${{ github.ref_type == 'tag' }}
