@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Resources;
 
@@ -71,6 +72,20 @@ public sealed class LocalizedResourceFacade
             sharedSatelliteAssemblyName);
     }
 
-    private static string GetAssemblyDirectory(Assembly assembly) =>
-        Path.GetDirectoryName(assembly.Location) ?? AppContext.BaseDirectory;
+    [UnconditionalSuppressMessage(
+        "SingleFile",
+        "IL3000:Avoid accessing Assembly file path when publishing as a single-file app",
+        Justification = "The empty single-file result is handled explicitly and falls back to AppContext.BaseDirectory.")]
+    private static string GetAssemblyDirectory(Assembly assembly)
+    {
+        // Single-file bundles embed assemblies and expose no on-disk path, so the
+        // bundle root (AppContext.BaseDirectory) is the closest equivalent directory.
+        string? location = assembly.Location;
+        if (string.IsNullOrEmpty(location))
+        {
+            return AppContext.BaseDirectory;
+        }
+
+        return Path.GetDirectoryName(location) ?? AppContext.BaseDirectory;
+    }
 }
