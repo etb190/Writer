@@ -6,11 +6,22 @@
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <!-- SixLabors.ImageSharp arrives transitively (legacy binary .doc image transcoding) at a
-         version with five known advisories (2 moderate, 3 high), all fixed in 4.1.2:
-         GHSA-gwg2-r3hj-4w44, GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q,
-         GHSA-jjfr-hcj7-qf5w, GHSA-wmxv-xphr-5c9g. Pinned to the first patched build. -->
-    <PackageVersion Include="SixLabors.ImageSharp" Version="4.1.2" />
+    <!-- SixLabors.ImageSharp arrives transitively via the legacy binary .doc importer (DocSharp 0.20,
+         compiled against the 2.x API — bumping majors risks runtime MissingMethod faults in import).
+         4.1.2 is the first patched build for the five open advisories (2 moderate, 3 high:
+         GHSA-gwg2-r3hj-4w44, GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q, GHSA-jjfr-hcj7-qf5w,
+         GHSA-wmxv-xphr-5c9g), but ImageSharp 4.x enforces a signed Six Labors license at build
+         time for Release configurations and no license is bundled with this repository. The
+         advisories are therefore suppressed as documented accepted risk, and the pin stays on
+         the DocSharp-compatible 2.x line.
+         To lift: obtain a Six Labors license key, set SixLaborsLicenseKey in CI, raise this pin
+         to >= 4.1.2, and delete the matching NuGetAuditSuppress entries. -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="2.1.11" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-gwg2-r3hj-4w44" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j3p4-wp97-rph4" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-j9gm-c75j-xc9q" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-jjfr-hcj7-qf5w" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-wmxv-xphr-5c9g" />
     <!-- HTML/MHTML reading (Writer.Core.IO HtmlFileAdapter/MhtmlFileAdapter): AngleSharp = HTML5 DOM
          parser/tree-construction; MimeKit = multipart/related MIME (MHTML) wrapper. Both MIT. -->
     <PackageVersion Include="AngleSharp" Version="1.5.1" />
