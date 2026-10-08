@@ -1521,6 +1521,10 @@ public static class AvaloniaRibbonRenderer
         };
 
         // ComboBox: Avalonia Fluent default height ~34px vs WPF ~26px — constrain to match.
+        // Text and fill are pinned explicitly (black on white): Fluent derives control ink from
+        // the OS color-scheme variant (ThemeVariant.Default), which paints white glyphs over the
+        // ribbon's white surface in OS dark mode — text invisible against its own background.
+        // The template-shell/glyph styles keep the open popup and its chevron in the same scheme.
         var comboBase = new Style(x => x.OfType<ComboBox>())
         {
             Setters =
@@ -1528,12 +1532,22 @@ public static class AvaloniaRibbonRenderer
                 new Setter(Layoutable.MinHeightProperty, RibbonVisualMetrics.SmallRowHeight),
                 new Setter(Layoutable.HeightProperty, RibbonVisualMetrics.SmallRowHeight),
                 new Setter(Layoutable.MaxHeightProperty, RibbonVisualMetrics.SmallRowHeight),
+                new Setter(TemplatedControl.BackgroundProperty, Brushes.White),
+                new Setter(TemplatedControl.ForegroundProperty, Brushes.Black),
                 new Setter(TemplatedControl.BorderBrushProperty, palette.DividerBrush),
                 new Setter(TemplatedControl.BorderThicknessProperty, new Thickness(1)),
                 new Setter(TemplatedControl.FontSizeProperty, 12d),
                 new Setter(TemplatedControl.FontFamilyProperty, RibbonFontFamily),
                 new Setter(TemplatedControl.PaddingProperty, new Thickness(6, 0, 18, 0)),
             },
+        };
+        var comboTemplateShell = new Style(x => x.OfType<ComboBox>().Template().OfType<Border>())
+        {
+            Setters = { new Setter(Border.BackgroundProperty, Brushes.White) },
+        };
+        var comboTemplateGlyph = new Style(x => x.OfType<ComboBox>().Template().OfType<global::Avalonia.Controls.Shapes.Path>())
+        {
+            Setters = { new Setter(Shape.FillProperty, Brushes.Black) },
         };
 
         var checkBase = new Style(x => x.OfType<CheckBox>())
@@ -1607,6 +1621,8 @@ public static class AvaloniaRibbonRenderer
         tabControl.Styles.Add(toggleCheckedHover);
         tabControl.Styles.Add(toggleCheckedTemplateBorder);
         tabControl.Styles.Add(comboBase);
+        tabControl.Styles.Add(comboTemplateShell);
+        tabControl.Styles.Add(comboTemplateGlyph);
         tabControl.Styles.Add(checkBase);
         tabControl.Styles.Add(disabledButtons);
         tabControl.Styles.Add(disabledToggles);
@@ -2238,12 +2254,56 @@ public static class AvaloniaRibbonRenderer
             Padding = new Thickness(6, 0, 18, 0),
             VerticalContentAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0, 2, 0),
-            Background = palette.SurfaceBrush,
+            Background = Brushes.White,
+            Foreground = Brushes.Black,
             BorderBrush = palette.DividerBrush,
             BorderThickness = new Thickness(1),
             ClipToBounds = false,
             Tag = combo.CommandId.Value,
         };
+
+        // Dropdown rows pin black-on-white with Office-like hover/selected tints so the open
+        // popup stays readable under any OS color scheme — Fluent's variant resources otherwise
+        // resolve white item ink that vanishes over white surfaces. Control-scoped styles win
+        // over the FluentTheme application styles regardless of ThemeVariant.
+        var comboItemBase = new Style(x => x.OfType<ComboBoxItem>())
+        {
+            Setters =
+            {
+                new Setter(TemplatedControl.BackgroundProperty, Brushes.White),
+                new Setter(TemplatedControl.ForegroundProperty, Brushes.Black),
+                new Setter(TemplatedControl.FontSizeProperty, 12d),
+                new Setter(TemplatedControl.FontFamilyProperty, RibbonFontFamily),
+            },
+        };
+        var comboItemHover = new Style(x => x.OfType<ComboBoxItem>().Class(":pointerover"))
+        {
+            Setters =
+            {
+                new Setter(TemplatedControl.BackgroundProperty, new ImmutableSolidColorBrush(Color.FromRgb(0xE8, 0xEC, 0xF1))),
+                new Setter(TemplatedControl.ForegroundProperty, Brushes.Black),
+            },
+        };
+        var comboItemSelected = new Style(x => x.OfType<ComboBoxItem>().Class(":selected"))
+        {
+            Setters =
+            {
+                new Setter(TemplatedControl.BackgroundProperty, new ImmutableSolidColorBrush(Color.FromRgb(0xCC, 0xE4, 0xF7))),
+                new Setter(TemplatedControl.ForegroundProperty, Brushes.Black),
+            },
+        };
+        var comboItemSelectedHover = new Style(x => x.OfType<ComboBoxItem>().Class(":selected").Class(":pointerover"))
+        {
+            Setters =
+            {
+                new Setter(TemplatedControl.BackgroundProperty, new ImmutableSolidColorBrush(Color.FromRgb(0xB9, 0xD9, 0xF2))),
+                new Setter(TemplatedControl.ForegroundProperty, Brushes.Black),
+            },
+        };
+        box.Styles.Add(comboItemBase);
+        box.Styles.Add(comboItemHover);
+        box.Styles.Add(comboItemSelected);
+        box.Styles.Add(comboItemSelectedHover);
         if (combo.Choices.Count > 0)
         {
             box.DisplayMemberBinding = new Binding(nameof(RibbonComboBoxChoice.Label));
